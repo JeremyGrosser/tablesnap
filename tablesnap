@@ -38,7 +38,7 @@ class UploadHandler(object):
 
         def progress(sent, total):
             if sent == total:
-                self.log.info('Finished uploading' % filename)
+                self.log.info('Finished uploading %s' % filename)
 
         try:
             dirname = os.path.dirname(filename)
