@@ -2,60 +2,79 @@
 import pyinotify
 import boto
 
+from optparse import OptionParser
 from traceback import format_exc
 from threading import Thread
+import logging
 import os.path
 import socket
 import json
 import sys
 import os
 
-s3 = boto.connect_s3()
-bucket = s3.get_bucket('com.simplegeo.sstables')
-hostname = socket.getfqdn()
+class UploadHandler(object):
+    def __init__(self, bucket):
+        self.bucket = bucket
+        self.hostname = socket.getfqdn()
 
-def upload_sstable(keyname, filename):
-    print 'Uploading', filename
+        self.log = logging.getLogger('tablesnap')
+        self.log.addHandler(logging.StreamHandler())
+        self.log.setLevel(logging.DEBUG)
 
-    def progress(sent, total):
-        if sent == total:
-            print 'Finished uploading', filename
+    def __call__(self, event):
+        mask = event.mask - (event.mask & pyinotify.IN_ISDIR)
+        maskname = pyinotify.EventsCodes.ALL_VALUES[event.mask]
+        if event.pathname.endswith('-Data.db'):
+            keyname = '%s:%s' % (self.hostname, event.pathname)
+            key = self.bucket.get_key(keyname)
+            if key is None:
+                t = Thread(target=self.upload_sstable, args=(
+                           keyname, event.pathname))
+                t.setDaemon(True)
+                t.start()
 
-    try:
-        dirname = os.path.dirname(filename)
-        key = bucket.new_key('%s-listdir.json' % keyname)
-        key.set_contents_from_string(json.dumps({dirname: os.listdir(dirname)}))
+    def upload_sstable(self, keyname, filename):
+        self.log.info('Uploading %s' % filename)
 
-        key = bucket.new_key(keyname)
-        key.set_contents_from_filename(filename, replace=False, cb=progress)
-    except:
-        print 'Error uploading', keyname
-        print format_exc()
+        def progress(sent, total):
+            if sent == total:
+                self.log.info('Finished uploading' % filename)
 
+        try:
+            dirname = os.path.dirname(filename)
+            key = self.bucket.new_key('%s-listdir.json' % keyname)
+            key.set_contents_from_string(
+                json.dumps({dirname: os.listdir(dirname)}))
 
-def handler(event):
-    mask = event.mask - (event.mask & pyinotify.IN_ISDIR)
-    maskname = pyinotify.EventsCodes.ALL_VALUES[event.mask]
-    if event.pathname.endswith('-Data.db'):
-        #print maskname, event.pathname
-        keyname = '%s:%s' % (hostname, event.pathname)
-        key = bucket.get_key(keyname)
-        if key is None:
-            t = Thread(target=upload_sstable, args=(keyname, event.pathname))
-            t.setDaemon(True)
-            t.start()
+            key = self.bucket.new_key(keyname)
+            key.set_contents_from_filename(filename, replace=False, cb=progress)
+        except:
+            self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
 
 
 def main():
-    if len(sys.argv) < 2:
-        sys.stderr.write('Usage: %s <path> [...]\n' % sys.argv[0])
+    parser = OptionParser(usage='%prog [options] <bucket> <path> [...]')
+    parser.add_option('-k', '--aws-key', dest='aws_key', default=None)
+    parser.add_option('-s', '--aws-secret', dest='aws_secret', default=None)
+    options, args = parser.parse_args()
+
+    if len(args) < 2:
+        parser.print_help()
         return -1
+
+    bucket = args[0]
+    paths = args[1:]
+
+    s3 = boto.connect_s3(options.aws_key, options.aws_secret)
+    bucket = s3.get_bucket(bucket)
+    handler = UploadHandler(bucket)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
-    for path in sys.argv[1:]:
+    for path in paths:
         wm.add_watch(path, pyinotify.IN_MOVED_TO)
     notifier.loop()
+
 
 if __name__ == '__main__':
     sys.exit(main())
