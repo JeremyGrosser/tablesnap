@@ -18,7 +18,10 @@ class UploadHandler(object):
         self.hostname = socket.getfqdn()
 
         self.log = logging.getLogger('tablesnap')
-        self.log.addHandler(logging.StreamHandler())
+        stderr = logging.StreamHandler()
+        stderr.setFormatter(
+            logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+        self.log.addHandler(stderr)
         self.log.setLevel(logging.DEBUG)
 
     def __call__(self, event):
