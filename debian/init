@@ -81,8 +81,7 @@ force_stop() {
 case "$1" in
   start)
         echo -n "Starting $DESC: "
-        start-stop-daemon --start --quiet --pidfile $PIDFILE \
-            --exec $DAEMON -- $DAEMON_OPTS
+        daemon --pidfile=$PIDFILE --output=$LOGFILE -- $DAEMON $DAEMON_OPTS
         if running ; then
             echo "$NAME."
         else
@@ -91,12 +90,6 @@ case "$1" in
         ;;
   stop)
         echo -n "Stopping $DESC: "
-        start-stop-daemon --stop --quiet --pidfile $PIDFILE \
-            --exec $DAEMON
-        echo "$NAME."
-        ;;
-  force-stop)
-        echo -n "Forcefully stopping $DESC: "
         force_stop
         if ! running ; then
             echo "$NAME."
@@ -116,27 +109,16 @@ case "$1" in
         # start-stop-daemon --stop --signal 1 --quiet --pidfile \
         #       /var/run/$NAME.pid --exec $DAEMON
   #;;
-  force-reload)
-        #
-        # If the "reload" option is implemented, move the "force-reload"
-        # option to the "reload" entry above. If not, "force-reload" is
-        # just the same as "restart" except that it does nothing if the
-        # daemon isn't already running.
-        # check wether $DAEMON is running. If so, restart
-        start-stop-daemon --stop --test --quiet --pidfile \
-            /var/run/$NAME.pid --exec $DAEMON \
-            && $0 restart \
-            || exit 0
-        ;;
   restart)
     echo -n "Restarting $DESC: "
-        start-stop-daemon --stop --quiet --pidfile \
-            /var/run/$NAME.pid --exec $DAEMON
-        [ -n "$DODTIME" ] && sleep $DODTIME
-        start-stop-daemon --start --quiet --pidfile \
-            /var/run/$NAME.pid --exec $DAEMON -- $DAEMON_OPTS
+	force_stop
+    daemon --pidfile=$PIDFILE --output=$LOGFILE -- $DAEMON $DAEMON_OPTS
+    if running ; then
         echo "$NAME."
-        ;;
+    else
+        echo " ERROR."
+    fi
+    ;;
   status)
     echo -n "$LABEL is "
     if running ;  then
@@ -149,7 +131,7 @@ case "$1" in
   *)
     N=/etc/init.d/$NAME
     # echo "Usage: $N {start|stop|restart|reload|force-reload}" >&2
-    echo "Usage: $N {start|stop|restart|force-reload|status|force-stop}" >&2
+    echo "Usage: $N {start|stop|restart|status}" >&2
     exit 1
     ;;
 esac
