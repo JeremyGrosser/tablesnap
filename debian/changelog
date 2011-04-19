@@ -1,3 +1,19 @@
+tablesnap (0.1-1sg4) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Refactor a bit
+  * Missing format string
+  * Debian fixups
+  * Add init script, remove source/format for native package
+  * Add license
+  * Widen the filter a bit
+  * Use daemon.c(1) to run in init script
+  * Add source/format
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:01:55 +0000
+
 tablesnap (0.1-1sg0) unstable; urgency=low
 
   * Initial release
