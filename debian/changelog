@@ -1,3 +1,13 @@
+tablesnap (0.1-1sg5) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Fix dependency
+  * Fix dependencies
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:04:04 +0000
+
 tablesnap (0.1-1sg4) lucid; urgency=low
 
   [ Jeremy Grosser ]
