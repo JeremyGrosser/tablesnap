@@ -1,3 +1,12 @@
+tablesnap (0.1-1sg8) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Require RUN=yes to be set
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:41:20 +0000
+
 tablesnap (0.1-1sg7) lucid; urgency=low
 
   [ Jeremy Grosser ]
