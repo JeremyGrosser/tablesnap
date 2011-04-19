@@ -1,3 +1,12 @@
+tablesnap (0.1-1sg7) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Timestamps on logs
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:29:55 +0000
+
 tablesnap (0.1-1sg6) lucid; urgency=low
 
   [ Jeremy Grosser ]
