@@ -30,6 +30,11 @@ if [ -f /etc/default/tablesnap ] ; then
     . /etc/default/tablesnap
 fi
 
+if [ "$RUN" != "yes" ]; then
+    echo "Set RUN=yes in /etc/default/tablesnap to start"
+    exit 0
+fi
+
 set -e
 
 running()
