@@ -1,3 +1,12 @@
+tablesnap (0.1-1sg6) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Simplify init script
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:26:18 +0000
+
 tablesnap (0.1-1sg5) lucid; urgency=low
 
   [ Jeremy Grosser ]
