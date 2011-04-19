@@ -24,7 +24,7 @@ class UploadHandler(object):
     def __call__(self, event):
         mask = event.mask - (event.mask & pyinotify.IN_ISDIR)
         maskname = pyinotify.EventsCodes.ALL_VALUES[event.mask]
-        if event.pathname.endswith('-Data.db'):
+        if event.pathname.find('-tmp') == -1:
             keyname = '%s:%s' % (self.hostname, event.pathname)
             key = self.bucket.get_key(keyname)
             if key is None:
