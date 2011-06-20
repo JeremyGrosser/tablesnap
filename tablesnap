@@ -37,7 +37,7 @@ class UploadHandler(pyinotify.ProcessEvent):
             else:
                 log.info("Keyname %s already exists, skipping upload" % keyname)
 
-    def upload_sstable(self, keyname, filename):
+    def upload_sstable(self, keyname, filename, with_index=True):
         log.info('Uploading %s' % filename)
 
         def progress(sent, total):
@@ -46,9 +46,10 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         try:
             dirname = os.path.dirname(filename)
-            key = self.bucket.new_key('%s-listdir.json' % keyname)
-            key.set_contents_from_string(
-                json.dumps({dirname: os.listdir(dirname)}))
+            if with_index:
+                key = self.bucket.new_key('%s-listdir.json' % keyname)
+                key.set_contents_from_string(
+                    json.dumps({dirname: os.listdir(dirname)}))
 
             key = self.bucket.new_key(keyname)
             key.set_contents_from_filename(filename, replace=False, cb=progress)
@@ -56,12 +57,28 @@ class UploadHandler(pyinotify.ProcessEvent):
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
 
 
+def backup_files(handler, bucket, paths):
+    for path in paths:
+        log.info('Backing up %s' % path)
+        for filename in os.listdir(path):
+            keyname = '%s:%s/%s' % (handler.hostname, path, filename)
+            if not bucket.get_key(keyname):
+                handler.upload_sstable(keyname, filename, with_index=False)
+            else:
+                log.info('Not uploading %s/%s, it already exists in this S3 bucket.' % (path, filename))
+    return 0
+
+
 def main():
     parser = OptionParser(usage='%prog [options] <bucket> <path> [...]')
     parser.add_option('-k', '--aws-key', dest='aws_key', default=None)
     parser.add_option('-s', '--aws-secret', dest='aws_secret', default=None)
-    parser.add_option('-r', '--recursive', action='store_true', dest='recursive', default=False)
-    parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False)
+    parser.add_option('-r', '--recursive', action='store_true', dest='recursive', default=False,
+        help='Recursively watch the given path(s)s for new SSTables')
+    parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False,
+        help='Automatically start watching new subdirectories within path(s)')
+    parser.add_option('-B', '--backup', action='store_true', dest='backup',
+        help='Backup existing SSTables to S3 if they\'re not already there')
     options, args = parser.parse_args()
 
     if len(args) < 2:
@@ -75,6 +92,9 @@ def main():
     bucket = s3.get_bucket(bucket)
     handler = UploadHandler(bucket=bucket)
 
+    if options.backup:
+        return backup_files(handler, bucket, paths)
+
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
@@ -85,4 +105,4 @@ def main():
     notifier.loop()
 
 if __name__ == '__main__':
-    sys.exit(main())
+    main()
