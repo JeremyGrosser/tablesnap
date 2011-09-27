@@ -59,8 +59,8 @@ def main():
     parser = OptionParser(usage='%prog [options] <bucket> <path> [...]')
     parser.add_option('-k', '--aws-key', dest='aws_key', default=None)
     parser.add_option('-s', '--aws-secret', dest='aws_secret', default=None)
-    parser.add_option('-r', '--recursive', dest='recursive', default=False)
-    parser.add_option('-a', '--auto-add', dest='auto_add', default=False)
+    parser.add_option('-r', '--recursive', action='store_true', dest='recursive', default=False)
+    parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False)
     options, args = parser.parse_args()
 
     if len(args) < 2:
@@ -77,9 +77,8 @@ def main():
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
-        wm.add_watch(path, pyinotify.IN_MOVED_TO, rec=options.recursive, auto_add=options.auto_add)
+        wm.add_watch(path, pyinotify.IN_MOVED_TO | pyinotify.IN_CREATE, rec=options.recursive, auto_add=options.auto_add)
     notifier.loop()
-
 
 if __name__ == '__main__':
     sys.exit(main())
