@@ -25,7 +25,6 @@ class UploadHandler(object):
         self.log.setLevel(logging.DEBUG)
 
     def __call__(self, event):
-        maskname = pyinotify.EventsCodes.ALL_VALUES[event.mask]
         if event.pathname.find('-tmp') == -1:
             keyname = '%s:%s' % (self.hostname, event.pathname)
             key = self.bucket.get_key(keyname)
