@@ -12,8 +12,8 @@ import json
 import sys
 import os
 
-class UploadHandler(object):
-    def __init__(self, bucket):
+class UploadHandler(pyinotify.ProcessEvent):
+    def my_init(self, bucket=None):
         self.bucket = bucket
         self.hostname = socket.getfqdn()
 
@@ -24,7 +24,7 @@ class UploadHandler(object):
         self.log.addHandler(stderr)
         self.log.setLevel(logging.DEBUG)
 
-    def __call__(self, event):
+    def process_IN_MOVED_TO(self, event):
         if event.pathname.find('-tmp') == -1:
             keyname = '%s:%s' % (self.hostname, event.pathname)
             key = self.bucket.get_key(keyname)
@@ -33,6 +33,8 @@ class UploadHandler(object):
                            keyname, event.pathname))
                 t.setDaemon(True)
                 t.start()
+            else:
+                self.log.info("Keyname %s already exists, skipping upload" % keyname)
 
     def upload_sstable(self, keyname, filename):
         self.log.info('Uploading %s' % filename)
@@ -70,12 +72,12 @@ def main():
 
     s3 = boto.connect_s3(options.aws_key, options.aws_secret)
     bucket = s3.get_bucket(bucket)
-    handler = UploadHandler(bucket)
+    handler = UploadHandler(bucket=bucket)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
-        wm.add_watch(path, pyinotify.IN_MOVED_TO | pyinotify.IN_CREATE, rec=options.recursive, auto_add=options.auto_add)
+        wm.add_watch(path, pyinotify.ALL_EVENTS, rec=options.recursive, auto_add=options.auto_add)
     notifier.loop()
 
 if __name__ == '__main__':
