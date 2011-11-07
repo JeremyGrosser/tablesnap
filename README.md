@@ -25,6 +25,15 @@ package includes an init script that can run and daemonize tablesnap for you.
 Tablesnap does not daemonize itself. This is best left to tools like
 init, supervisord, daemontools, etc.
 
+There are pre-build binaries for Ubuntu Maverick amd64 and i386 in this PPA:
+`https://launchpad.net/~synack/+archive/tablesnap`
+
+	# cat /etc/apt/sources.list.d/tablesnap.list << EOF
+	> deb http://ppa.launchpad.net/synack/tablesnap/ubuntu maverick main
+	> deb-src http://ppa.launchpad.net/synack/tablesnap/ubuntu maverick main
+	> EOF
+	# aptitude update
+
 If you are not a Debian/Ubuntu user or do not wish to install the tablesnap
 package, you may copy the tablesnap script anywhere you'd like and run it from
 there. Tablesnap depends on the pyinotify and boto Python packages. These are
