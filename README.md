@@ -26,7 +26,7 @@ Tablesnap does not daemonize itself. This is best left to tools like
 init, supervisord, daemontools, etc.
 
 There are pre-build binaries for Ubuntu Maverick amd64 and i386 in this PPA:
-`https://launchpad.net/~synack/+archive/tablesnap`
+<https://launchpad.net/~synack/+archive/tablesnap>
 
 	# cat /etc/apt/sources.list.d/tablesnap.list << EOF
 	> deb http://ppa.launchpad.net/synack/tablesnap/ubuntu maverick main
