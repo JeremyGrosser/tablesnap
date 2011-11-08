@@ -2,7 +2,7 @@ Name:		tablesnap
 Version:	0.2
 Release:	1
 Summary:	Uses inotify to monitor Cassandra SSTables and upload them to S3
-Source:		tablesnap-0.2.tar.gz
+Source:		%{name}-%{version}.tar.gz
 Group:		Applications/Databases
 License:	BSD
 URL:		https://github.com/synack/tablesnap
