@@ -4,7 +4,7 @@ Tablesnap
 Theory of Operation
 -------------------
 
-Tablesnap is a script that uses inotify to monitor a directory for IN_MOVED_TO
+Tablesnap is a script that uses inotify to monitor a directory for `IN_MOVED_TO`
 events and reacts to them by spawning a new thread to upload that file to
 Amazon S3, along with a JSON-formatted list of what other files were in the
 directory at the time of the copy.
@@ -47,13 +47,15 @@ All configuration for tablesnap happens on the command line. If you are using
 the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
 `/etc/default/tablesnap`.
 
-	$ tablesnap --help
-	Usage: tablesnap [options] [...]
+    Usage: tablesnap [options] <bucket> <path> [...]
+    Options:
+      -h, --help            show this help message and exit
+      -k AWS_KEY, --aws-key=AWS_KEY
+      -s AWS_SECRET, --aws-secret=AWS_SECRET
+      -r, --recursive       Recursively watch the given path(s)s for new SSTables
+      -a, --auto-add        Automatically start watching new subdirectories within path(s)
+      -B, --backup          Backup existing SSTables to S3 if they're not already there
 
-	Options:
-		-h, --help show this help message and exit
-		-k AWS_KEY, --aws-key=AWS_KEY
-		-s AWS_SECRET, --aws-secret=AWS_SECRET
 
 For example:
 
