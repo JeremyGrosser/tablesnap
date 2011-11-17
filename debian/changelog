@@ -1,3 +1,13 @@
+tablesnap (0.2-1sg12) maverick; urgency=low
+
+  [ Jeremy Grosser ]
+  * Upload using the full path name
+  * Don't upload -tmp files
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Thu, 17 Nov 2011 00:07:38 +0000
+
 tablesnap (0.2-1sg11) maverick; urgency=low
 
   * UNRELEASED
