@@ -61,6 +61,8 @@ def backup_files(handler, bucket, paths):
     for path in paths:
         log.info('Backing up %s' % path)
         for filename in os.listdir(path):
+            if filename.find('-tmp') != -1:
+                continue
             keyname = '%s:%s/%s' % (handler.hostname, path, filename)
             if not bucket.get_key(keyname):
                 handler.upload_sstable(keyname, '%s/%s' % (path, filename), with_index=False)
