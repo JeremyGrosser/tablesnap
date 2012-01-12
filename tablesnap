@@ -11,7 +11,8 @@ import socket
 import json
 import sys
 import os
-
+import pwd
+import grp
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
@@ -56,7 +57,27 @@ class UploadHandler(pyinotify.ProcessEvent):
                     json.dumps({dirname: os.listdir(dirname)}),
                     headers={'Content-Type': 'application/json'})
 
+            # Include the file system metadata so that we have the
+            # option of using it to restore the file modes correctly.
+            #
+            stat = os.stat(filename)
+            meta = {'uid': stat.st_uid,
+                    'gid': stat.st_gid,
+                    'mode': stat.st_mode}
+            try:
+                u = pwd.getpwuid(stat.st_uid)
+                meta['user'] = u.pw_name
+            except:
+                pass
+
+            try:
+                g = grp.getgrgid(stat.st_gid)
+                meta['group'] = g.gr_name
+            except:
+                pass
+
             key = self.bucket.new_key(keyname)
+            key.set_metadata('stat', json.dumps(meta))
             key.set_contents_from_filename(filename, replace=False, cb=progress)
         except:
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
