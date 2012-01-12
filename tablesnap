@@ -22,13 +22,13 @@ log.setLevel(logging.DEBUG)
 
 
 class UploadHandler(pyinotify.ProcessEvent):
-    def my_init(self, bucket=None, prefix=None):
+    def my_init(self, bucket=None, prefix=None, name=None):
         self.bucket = bucket
         self.prefix = prefix
-        self.hostname = socket.getfqdn()
+        self.name = name or socket.getfqdn()
 
     def build_keyname(self, pathname):
-        return '%s%s:%s' % (self.prefix or '', self.hostname, pathname)
+        return '%s%s:%s' % (self.prefix or '', self.name, pathname)
 
     def process_IN_MOVED_TO(self, event):
         if event.pathname.find('-tmp') == -1:
@@ -108,6 +108,8 @@ def main():
         help='Automatically start watching new subdirectories within path(s)')
     parser.add_option('-p', '--prefix', dest='prefix', default=None,
         help='Set a string prefix for uploaded files in S3')
+    parser.add_option('-n', '--name', dest='name', default=None,
+        help='Use this name instead of the FQDN to identify the SSTables from this host')
     parser.add_option('-B', '--backup', action='store_true', dest='backup',
         help='Backup existing SSTables to S3 if they\'re not already there')
     options, args = parser.parse_args()
@@ -121,7 +123,8 @@ def main():
 
     s3 = boto.connect_s3(options.aws_key, options.aws_secret)
     bucket = s3.get_bucket(bucket)
-    handler = UploadHandler(bucket=bucket, prefix=options.prefix)
+    handler = UploadHandler(bucket=bucket, prefix=options.prefix,
+                            name=options.name)
 
     if options.backup:
         return backup_files(handler, bucket, paths)
