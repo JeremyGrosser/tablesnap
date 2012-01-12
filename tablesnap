@@ -53,7 +53,8 @@ class UploadHandler(pyinotify.ProcessEvent):
             if with_index:
                 key = self.bucket.new_key('%s-listdir.json' % keyname)
                 key.set_contents_from_string(
-                    json.dumps({dirname: os.listdir(dirname)}))
+                    json.dumps({dirname: os.listdir(dirname)}),
+                    headers={'Content-Type': 'application/json'})
 
             key = self.bucket.new_key(keyname)
             key.set_contents_from_filename(filename, replace=False, cb=progress)
