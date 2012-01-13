@@ -126,9 +126,6 @@ def main():
     handler = UploadHandler(bucket=bucket, prefix=options.prefix,
                             name=options.name)
 
-    if options.backup:
-        return backup_files(handler, bucket, paths)
-
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
@@ -136,6 +133,10 @@ def main():
         if ret[path] == -1:
             log.critical('add_watch failed for %s, bailing out!' % path)
             return 1
+
+    if options.backup:
+        backup_files(handler, bucket, paths)
+
     notifier.loop()
 
 if __name__ == '__main__':
