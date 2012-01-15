@@ -54,8 +54,6 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.add_file(event.pathname)
 
     def upload_sstable(self, keyname, filename, with_index=True):
-        log.info('Uploading %s' % filename)
-
         if self.bucket.get_key(keyname):
             log.info("Keyname %s already exists, skipping upload" % keyname)
             return
@@ -65,6 +63,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                 log.info('Finished uploading %s' % filename)
 
         try:
+            log.info('Uploading %s' % filename)
+
             dirname = os.path.dirname(filename)
             if with_index:
                 key = self.bucket.new_key('%s-listdir.json' % keyname)
@@ -75,7 +75,10 @@ class UploadHandler(pyinotify.ProcessEvent):
             # Include the file system metadata so that we have the
             # option of using it to restore the file modes correctly.
             #
-            stat = os.stat(filename)
+            try:
+                stat = os.stat(filename)
+            except OSError:
+                return
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
                     'mode': stat.st_mode}
