@@ -5,6 +5,7 @@ import boto
 from optparse import OptionParser
 from traceback import format_exc
 from threading import Thread
+from Queue import Queue
 import logging
 import os.path
 import socket
@@ -13,6 +14,7 @@ import sys
 import os
 import pwd
 import grp
+import time
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
@@ -20,30 +22,43 @@ stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 log.addHandler(stderr)
 log.setLevel(logging.DEBUG)
 
+# Default number of writer threads
+default_threads = 4
 
 class UploadHandler(pyinotify.ProcessEvent):
-    def my_init(self, bucket=None, prefix=None, name=None):
+    def my_init(self, threads=None, bucket=None, prefix=None, name=None):
         self.bucket = bucket
         self.prefix = prefix
         self.name = name or socket.getfqdn()
+        self.fileq = Queue()
+        for i in range(threads):
+            t = Thread(target=self.worker)
+            t.daemon = True
+            t.start()
 
     def build_keyname(self, pathname):
         return '%s%s:%s' % (self.prefix or '', self.name, pathname)
 
+    def add_file(self, filename):
+        if filename.find('-tmp') == -1:
+            self.fileq.put(filename)
+
+    def worker(self):
+        while True:
+            f = self.fileq.get()
+            keyname = self.build_keyname(f)
+            self.upload_sstable(keyname, f)
+            self.fileq.task_done()
+
     def process_IN_MOVED_TO(self, event):
-        if event.pathname.find('-tmp') == -1:
-            keyname = self.build_keyname(event.pathname)
-            key = self.bucket.get_key(keyname)
-            if key is None:
-                t = Thread(target=self.upload_sstable, args=(
-                           keyname, event.pathname))
-                t.setDaemon(True)
-                t.start()
-            else:
-                log.info("Keyname %s already exists, skipping upload" % keyname)
+        self.add_file(event.pathname)
 
     def upload_sstable(self, keyname, filename, with_index=True):
         log.info('Uploading %s' % filename)
+
+        if self.bucket.get_key(keyname):
+            log.info("Keyname %s already exists, skipping upload" % keyname)
+            return
 
         def progress(sent, total):
             if sent == total:
@@ -94,11 +109,7 @@ def backup_files(handler, bucket, paths):
             if os.path.isdir(fullpath):
                 continue
 
-            keyname = handler.build_keyname(fullpath)
-            if not bucket.get_key(keyname):
-                handler.upload_sstable(keyname, fullpath, with_index=False)
-            else:
-                log.info('Not uploading %s, it already exists in this S3 bucket.' % (fullpath))
+            handler.add_file(fullpath)
     return 0
 
 
@@ -112,10 +123,10 @@ def main():
         help='Automatically start watching new subdirectories within path(s)')
     parser.add_option('-p', '--prefix', dest='prefix', default=None,
         help='Set a string prefix for uploaded files in S3')
+    parser.add_option('-t', '--threads', dest='threads', default=default_threads,
+                      help='Number of writer threads')
     parser.add_option('-n', '--name', dest='name', default=None,
         help='Use this name instead of the FQDN to identify the SSTables from this host')
-    parser.add_option('-B', '--backup', action='store_true', dest='backup',
-        help='Backup existing SSTables to S3 if they\'re not already there')
     options, args = parser.parse_args()
 
     if len(args) < 2:
@@ -127,19 +138,19 @@ def main():
 
     s3 = boto.connect_s3(options.aws_key, options.aws_secret)
     bucket = s3.get_bucket(bucket)
-    handler = UploadHandler(bucket=bucket, prefix=options.prefix,
-                            name=options.name)
+    handler = UploadHandler(threads=options.threads, bucket=bucket,
+                            prefix=options.prefix, name=options.name)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
-        ret = wm.add_watch(path, pyinotify.ALL_EVENTS, rec=options.recursive, auto_add=options.auto_add)
+        ret = wm.add_watch(path, pyinotify.ALL_EVENTS, rec=options.recursive,
+                           auto_add=options.auto_add)
         if ret[path] == -1:
             log.critical('add_watch failed for %s, bailing out!' % path)
             return 1
 
-    if options.backup:
-        backup_files(handler, bucket, paths)
+    backup_files(handler, bucket, paths)
 
     notifier.loop()
 
