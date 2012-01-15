@@ -78,7 +78,9 @@ class UploadHandler(pyinotify.ProcessEvent):
             try:
                 stat = os.stat(filename)
             except OSError:
+                # File removed?
                 return
+
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
                     'mode': stat.st_mode}
