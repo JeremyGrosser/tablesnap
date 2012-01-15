@@ -143,13 +143,14 @@ def main():
 
     s3 = boto.connect_s3(options.aws_key, options.aws_secret)
     bucket = s3.get_bucket(bucket)
+
     handler = UploadHandler(threads=options.threads, bucket=bucket,
                             prefix=options.prefix, name=options.name)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
-        ret = wm.add_watch(path, pyinotify.ALL_EVENTS, rec=options.recursive,
+        ret = wm.add_watch(path, pyinotify.IN_MOVED_TO, rec=options.recursive,
                            auto_add=options.auto_add)
         if ret[path] == -1:
             log.critical('add_watch failed for %s, bailing out!' % path)
