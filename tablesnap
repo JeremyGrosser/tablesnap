@@ -26,8 +26,11 @@ log.setLevel(logging.DEBUG)
 default_threads = 4
 
 class UploadHandler(pyinotify.ProcessEvent):
-    def my_init(self, threads=None, bucket=None, prefix=None, name=None):
-        self.bucket = bucket
+    def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
+                prefix=None, name=None):
+        self.key = key
+        self.secret = secret
+        self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
         self.fileq = Queue()
@@ -44,17 +47,21 @@ class UploadHandler(pyinotify.ProcessEvent):
             self.fileq.put(filename)
 
     def worker(self):
+        # Reconnect to S3
+        s3 = boto.connect_s3(self.key, self.secret)
+        bucket = s3.get_bucket(self.bucket_name)
+
         while True:
             f = self.fileq.get()
             keyname = self.build_keyname(f)
-            self.upload_sstable(keyname, f)
+            self.upload_sstable(bucket, keyname, f)
             self.fileq.task_done()
 
     def process_IN_MOVED_TO(self, event):
         self.add_file(event.pathname)
 
-    def upload_sstable(self, keyname, filename, with_index=True):
-        if self.bucket.get_key(keyname):
+    def upload_sstable(self, bucket, keyname, filename, with_index=True):
+        if bucket.get_key(keyname):
             log.info("Keyname %s already exists, skipping upload" % keyname)
             return
 
@@ -67,7 +74,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
             dirname = os.path.dirname(filename)
             if with_index:
-                key = self.bucket.new_key('%s-listdir.json' % keyname)
+                key = bucket.new_key('%s-listdir.json' % keyname)
                 key.set_contents_from_string(
                     json.dumps({dirname: os.listdir(dirname)}),
                     headers={'Content-Type': 'application/json'})
@@ -96,14 +103,14 @@ class UploadHandler(pyinotify.ProcessEvent):
             except:
                 pass
 
-            key = self.bucket.new_key(keyname)
+            key = bucket.new_key(keyname)
             key.set_metadata('stat', json.dumps(meta))
             key.set_contents_from_filename(filename, replace=False, cb=progress)
         except:
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
 
 
-def backup_files(handler, bucket, paths):
+def backup_files(handler, paths):
     for path in paths:
         log.info('Backing up %s' % path)
         for filename in os.listdir(path):
@@ -141,10 +148,13 @@ def main():
     bucket = args[0]
     paths = args[1:]
 
+    # Check S3 credentials only. We reconnect per-thread to avoid any
+    # potential thread-safety problems.
     s3 = boto.connect_s3(options.aws_key, options.aws_secret)
     bucket = s3.get_bucket(bucket)
 
-    handler = UploadHandler(threads=options.threads, bucket=bucket,
+    handler = UploadHandler(threads=options.threads, key=options.aws_key,
+                            secret=options.aws_secret, bucket_name=bucket,
                             prefix=options.prefix, name=options.name)
 
     wm = pyinotify.WatchManager()
@@ -156,7 +166,7 @@ def main():
             log.critical('add_watch failed for %s, bailing out!' % path)
             return 1
 
-    backup_files(handler, bucket, paths)
+    backup_files(handler, paths)
 
     notifier.loop()
 
