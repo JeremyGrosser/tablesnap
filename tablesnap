@@ -105,7 +105,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
             key = bucket.new_key(keyname)
             key.set_metadata('stat', json.dumps(meta))
-            key.set_contents_from_filename(filename, replace=False, cb=progress)
+            key.set_contents_from_filename(filename, replace=True, cb=progress)
         except:
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
 
