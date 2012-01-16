@@ -172,7 +172,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                     key = bucket.new_key(keyname)
                     key.set_metadata('stat', json.dumps(meta))
                     key.set_contents_from_filename(filename, replace=True,
-                                                   cb=progress)
+                                                   cb=progress, num_cb=1)
                     break
                 except:
                     if r == self.retries - 1:
