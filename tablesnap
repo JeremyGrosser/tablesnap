@@ -15,6 +15,7 @@ import os
 import pwd
 import grp
 import time
+import signal
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
@@ -25,6 +26,9 @@ log.setLevel(logging.DEBUG)
 # Default number of writer threads
 default_threads = 4
 
+# Default retries
+default_retries = 3
+
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
                 prefix=None, name=None):
@@ -33,6 +37,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
+        self.retries = default_retries
         self.fileq = Queue()
         for i in range(threads):
             t = Thread(target=self.worker)
@@ -54,15 +59,65 @@ class UploadHandler(pyinotify.ProcessEvent):
         while True:
             f = self.fileq.get()
             keyname = self.build_keyname(f)
-            self.upload_sstable(bucket, keyname, f)
+            try:
+                self.upload_sstable(bucket, keyname, f)
+            except:
+                log.critical("Failed uploading %s. Aborting.\n%s" %
+                             (f, format_exc()))
+                # Brute force kill self
+                os.kill(os.getpid(), signal.SIGKILL)
+
             self.fileq.task_done()
 
     def process_IN_MOVED_TO(self, event):
         self.add_file(event.pathname)
 
-    def upload_sstable(self, bucket, keyname, filename, with_index=True):
-        if bucket.get_key(keyname):
+    #
+    # Check if this keyname (ie, file) has already been uploaded to
+    # the S3 bucket. This will verify that not only does the keyname
+    # exist, but that the MD5 sum is the same -- this protects against
+    # partial or corrupt uploads.
+    #
+    def keyname_exists(self, bucket, keyname, filename):
+        key = None
+        for r in range(self.retries):
+            try:
+                key = bucket.get_key(keyname)
+                if key == None:
+                    return False
+                else:
+                    break
+            except:
+                continue
+
+        if key == None:
+            log.critical("Failed to lookup keyname %s after %d retries\n%s" %
+                         (keyname, self.retries, format_exc()))
+            raise
+
+        # Compute MD5 sum of file
+        try:
+            fp = open(filename, "r")
+        except IOError as (errno, strerror):
+            if errno == 2:
+                # The file was removed, return True to skip this file.
+                return True
+
+            log.critical("Failed to open file: %s (%s)\n%s" %
+                         (filename, strerror, format_exc()))
+            raise
+
+        md5 = key.compute_md5(fp)
+        fp.close
+
+        result = (md5[0] == key.etag.strip('"'))
+        if result:
             log.info("Keyname %s already exists, skipping upload" % keyname)
+
+        return result
+
+    def upload_sstable(self, bucket, keyname, filename, with_index=True):
+        if self.keyname_exists(bucket, keyname, filename):
             return
 
         def progress(sent, total):
