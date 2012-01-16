@@ -130,9 +130,18 @@ class UploadHandler(pyinotify.ProcessEvent):
             dirname = os.path.dirname(filename)
             if with_index:
                 key = bucket.new_key('%s-listdir.json' % keyname)
-                key.set_contents_from_string(
-                    json.dumps({dirname: os.listdir(dirname)}),
-                    headers={'Content-Type': 'application/json'})
+                json_str = json.dumps({dirname: os.listdir(dirname)})
+                for r in range(self.retries):
+                    try:
+                        key.set_contents_from_string(json_str,
+                            headers={'Content-Type': 'application/json'},
+                            replace=True)
+                        break
+                    except:
+                        if r == self.retries - 1:
+                            log.critical("Failed to upload directory listing.")
+                            raise
+                        continue
 
             # Include the file system metadata so that we have the
             # option of using it to restore the file modes correctly.
@@ -158,11 +167,22 @@ class UploadHandler(pyinotify.ProcessEvent):
             except:
                 pass
 
-            key = bucket.new_key(keyname)
-            key.set_metadata('stat', json.dumps(meta))
-            key.set_contents_from_filename(filename, replace=True, cb=progress)
+            for r in range(self.retries):
+                try:
+                    key = bucket.new_key(keyname)
+                    key.set_metadata('stat', json.dumps(meta))
+                    key.set_contents_from_filename(filename, replace=True,
+                                                   cb=progress)
+                    break
+                except:
+                    if r == self.retries - 1:
+                        log.critical("Failed to upload file contents.")
+                        raise
+                    continue
+
         except:
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
+            raise
 
 
 def backup_files(handler, paths):
