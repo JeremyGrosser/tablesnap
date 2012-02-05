@@ -180,6 +180,10 @@ class UploadHandler(pyinotify.ProcessEvent):
                                                    cb=progress, num_cb=1)
                     break
                 except:
+                    if not os.path.exists(filename):
+                        # File was removed? Skip
+                        return
+
                     if r == self.retries - 1:
                         log.critical("Failed to upload file contents.")
                         raise
