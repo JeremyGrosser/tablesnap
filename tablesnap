@@ -39,7 +39,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.name = name or socket.getfqdn()
         self.retries = default_retries
         self.fileq = Queue()
-        for i in range(threads):
+        for i in range(int(threads)):
             t = Thread(target=self.worker)
             t.daemon = True
             t.start()
@@ -51,10 +51,13 @@ class UploadHandler(pyinotify.ProcessEvent):
         if filename.find('-tmp') == -1:
             self.fileq.put(filename)
 
-    def worker(self):
+    def get_bucket(self):
         # Reconnect to S3
         s3 = boto.connect_s3(self.key, self.secret)
-        bucket = s3.get_bucket(self.bucket_name)
+        return s3.get_bucket(self.bucket_name)
+
+    def worker(self):
+        bucket = self.get_bucket()
 
         while True:
             f = self.fileq.get()
@@ -88,6 +91,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 else:
                     break
             except:
+                bucket = self.get_bucket()
                 continue
 
         if key == None:
@@ -129,10 +133,10 @@ class UploadHandler(pyinotify.ProcessEvent):
 
             dirname = os.path.dirname(filename)
             if with_index:
-                key = bucket.new_key('%s-listdir.json' % keyname)
                 json_str = json.dumps({dirname: os.listdir(dirname)})
                 for r in range(self.retries):
                     try:
+                        key = bucket.new_key('%s-listdir.json' % keyname)
                         key.set_contents_from_string(json_str,
                             headers={'Content-Type': 'application/json'},
                             replace=True)
@@ -141,6 +145,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         if r == self.retries - 1:
                             log.critical("Failed to upload directory listing.")
                             raise
+                        bucket = self.get_bucket()
                         continue
 
             # Include the file system metadata so that we have the
@@ -178,6 +183,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                     if r == self.retries - 1:
                         log.critical("Failed to upload file contents.")
                         raise
+                    bucket = self.get_bucket()
                     continue
 
         except:
