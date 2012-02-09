@@ -114,6 +114,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         # XXX: S3 can't etag files larger than 5gb
         if stat.st_size > s3_limit:
+            log.info("Keyname %s exists and file is over 5GB, skipping upload" % keyname)
             return True
 
         # Compute MD5 sum of file
