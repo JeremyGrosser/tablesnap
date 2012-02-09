@@ -112,8 +112,9 @@ class UploadHandler(pyinotify.ProcessEvent):
             # File removed?
             return True
 
-        # XXX: S3 can't etag files larger than 5gb
-        if stat.st_size > s3_limit:
+        # XXX: S3 can't etag files larger than 5gb, so just check
+        # that the size matches
+        if stat.st_size > s3_limit and key.size == stat.st_size:
             log.info("Keyname %s exists and file is over 5GB, skipping upload" % keyname)
             return True
 
