@@ -17,6 +17,10 @@ import grp
 import time
 import signal
 
+sys.path += [os.path.dirname(os.path.abspath( __file__ )) + "/lib"]
+
+from filechunkio import FileChunkIO
+
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
 stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
@@ -27,7 +31,10 @@ log.setLevel(logging.DEBUG)
 default_threads = 4
 
 # Default retries
-default_retries = 3
+default_retries = 1
+
+# S3 limit for single file upload
+s3_limit = 5 * 2**30
 
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
@@ -99,6 +106,18 @@ class UploadHandler(pyinotify.ProcessEvent):
                          (keyname, self.retries, format_exc()))
             raise
 
+        try:
+            stat = os.stat(filename)
+        except OSError:
+            # File removed?
+            return True
+
+        # XXX: S3 can't etag files larger than 5gb, so just check
+        # that the size matches
+        if stat.st_size > s3_limit and key.size == stat.st_size:
+            log.info("Keyname %s exists and file is over 5GB, skipping upload" % keyname)
+            return True
+
         # Compute MD5 sum of file
         try:
             fp = open(filename, "r")
@@ -120,17 +139,83 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         return result
 
-    def upload_sstable(self, bucket, keyname, filename, with_index=True):
-        if self.keyname_exists(bucket, keyname, filename):
-            return
+    # TODO: This will block and upload each part from a single
+    # thread. Instead, we could put each part of the file on the workq
+    # and upload them simulataneously.
+    #
+    def multipart_upload(self, bucket, keyname, filename, size, meta):
+        parts = size / s3_limit
+        if (size % s3_limit) > 0:
+            parts += 1
 
+        try:
+            fp = FileChunkIO(filename, 'r', bytes=size)
+        except IOError as (errno, strerror):
+            if errno == 2:
+                # The file was removed, skip
+                return
+
+            log.critical("Failed to open file: %s (%s)\n%s" %
+                         (filename, strerror, format_exc()))
+            raise
+
+        md = {'stat': json.dumps(meta)}
+        mp = bucket.initiate_multipart_upload(keyname, metadata=md)
+
+        partsz = size / parts
+        for i in range(parts):
+            offset = i * partsz
+            chunksz = partsz if i < (parts - 1) else (size - offset)
+
+            fp.set_chunk(offset, chunksz)
+
+            log.info("Uploading part %d/%d of %s" %
+                     (i + 1, parts, filename))
+            try:
+                #print "off: %d, sz: %d, total: %d\n" %  (offset, chunksz, size)
+                mp.upload_part_from_file(fp, i + 1, replace=True)
+            except:
+                log.critical("Failed to upload part %d/%d of %s" %
+                             (i + 1, parts, filename))
+                mp.cancel_upload()
+                raise
+
+            log.info("Successfully uploaded part %d/%d of %s" %
+                     (i + 1, parts, filename))
+
+        mp.complete_upload()
+        fp.close()
+
+    def single_upload(self, bucket, keyname, filename, meta):
         def progress(sent, total):
             if sent == total:
                 log.info('Finished uploading %s' % filename)
 
-        try:
-            log.info('Uploading %s' % filename)
+        log.info('Uploading %s' % filename)
 
+        for r in range(self.retries):
+            try:
+                key = bucket.new_key(keyname)
+                key.set_metadata('stat', json.dumps(meta))
+                key.set_contents_from_filename(filename, replace=True,
+                                               cb=progress, num_cb=1)
+                break
+            except:
+                if not os.path.exists(filename):
+                    # File was removed? Skip
+                    return
+
+                if r == self.retries - 1:
+                    log.critical("Failed to upload file contents.")
+                    raise
+                bucket = self.get_bucket()
+                continue
+
+    def upload_sstable(self, bucket, keyname, filename, with_index=True):
+        if self.keyname_exists(bucket, keyname, filename):
+            return
+
+        try:
             dirname = os.path.dirname(filename)
             if with_index:
                 json_str = json.dumps({dirname: os.listdir(dirname)})
@@ -172,23 +257,11 @@ class UploadHandler(pyinotify.ProcessEvent):
             except:
                 pass
 
-            for r in range(self.retries):
-                try:
-                    key = bucket.new_key(keyname)
-                    key.set_metadata('stat', json.dumps(meta))
-                    key.set_contents_from_filename(filename, replace=True,
-                                                   cb=progress, num_cb=1)
-                    break
-                except:
-                    if not os.path.exists(filename):
-                        # File was removed? Skip
-                        return
-
-                    if r == self.retries - 1:
-                        log.critical("Failed to upload file contents.")
-                        raise
-                    bucket = self.get_bucket()
-                    continue
+            if stat.st_size > s3_limit:
+                self.multipart_upload(bucket, keyname, filename, stat.st_size,
+                                      meta)
+            else:
+                self.single_upload(bucket, keyname, filename, meta)
 
         except:
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
