@@ -106,6 +106,16 @@ class UploadHandler(pyinotify.ProcessEvent):
                          (keyname, self.retries, format_exc()))
             raise
 
+        try:
+            stat = os.stat(filename)
+        except OSError:
+            # File removed?
+            return True
+
+        # XXX: S3 can't etag files larger than 5gb
+        if stat.st_size > s3_limit:
+            return True
+
         # Compute MD5 sum of file
         try:
             fp = open(filename, "r")
