@@ -132,10 +132,6 @@ class UploadHandler(pyinotify.ProcessEvent):
     # and upload them simulataneously.
     #
     def multipart_upload(self, bucket, keyname, filename, size, meta):
-        def progress(sent, total):
-            if sent == total:
-                log.info('Finished uploading %s' % filename)
-
         parts = size / s3_limit
         if (size % s3_limit) > 0:
             parts += 1
@@ -165,8 +161,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                      (i + 1, parts, filename))
             try:
                 #print "off: %d, sz: %d, total: %d\n" %  (offset, chunksz, size)
-                mp.upload_part_from_file(fp, i + 1, replace=True,
-                                         cb=progress, num_cb=1)
+                mp.upload_part_from_file(fp, i + 1, replace=True)
             except:
                 log.critical("Failed to upload part %d/%d of %s" %
                              (i + 1, parts, filename))
