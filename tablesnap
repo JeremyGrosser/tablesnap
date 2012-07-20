@@ -267,19 +267,26 @@ class UploadHandler(pyinotify.ProcessEvent):
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
+def backup_file(handler, filename, filedir):
+    if filename.find('-tmp') != -1:
+        return
 
-def backup_files(handler, paths):
+    fullpath = '%s/%s' % (filedir, filename)
+    if os.path.isdir(fullpath):
+        return
+
+    handler.add_file(fullpath)
+
+def backup_files(handler, paths, recurse):
     for path in paths:
         log.info('Backing up %s' % path)
-        for filename in os.listdir(path):
-            if filename.find('-tmp') != -1:
-                continue
-
-            fullpath = '%s/%s' % (path, filename)
-            if os.path.isdir(fullpath):
-                continue
-
-            handler.add_file(fullpath)
+        if recurse:
+            for root, dirs, files in os.walk(path):
+                for filename in files:
+                    backup_file(handler, filename, root)
+        else:
+            for filename in os.listdir(path):
+                backup_file(handler, filename, path)
     return 0
 
 
@@ -324,7 +331,7 @@ def main():
             log.critical('add_watch failed for %s, bailing out!' % path)
             return 1
 
-    backup_files(handler, paths)
+    backup_files(handler, paths, options.recursive)
 
     notifier.loop()
 
