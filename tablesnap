@@ -5,13 +5,17 @@ import boto
 from optparse import OptionParser
 from traceback import format_exc
 from threading import Thread
+from Queue import Queue
 import logging
 import os.path
 import socket
 import json
 import sys
 import os
-
+import pwd
+import grp
+import time
+import signal
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
@@ -19,55 +23,190 @@ stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 log.addHandler(stderr)
 log.setLevel(logging.DEBUG)
 
+# Default number of writer threads
+default_threads = 4
+
+# Default retries
+default_retries = 3
 
 class UploadHandler(pyinotify.ProcessEvent):
-    def my_init(self, bucket=None):
-        self.bucket = bucket
-        self.hostname = socket.getfqdn()
+    def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
+                prefix=None, name=None):
+        self.key = key
+        self.secret = secret
+        self.bucket_name = bucket_name
+        self.prefix = prefix
+        self.name = name or socket.getfqdn()
+        self.retries = default_retries
+        self.fileq = Queue()
+        for i in range(int(threads)):
+            t = Thread(target=self.worker)
+            t.daemon = True
+            t.start()
+
+    def build_keyname(self, pathname):
+        return '%s%s:%s' % (self.prefix or '', self.name, pathname)
+
+    def add_file(self, filename):
+        if filename.find('-tmp') == -1:
+            self.fileq.put(filename)
+
+    def get_bucket(self):
+        # Reconnect to S3
+        s3 = boto.connect_s3(self.key, self.secret)
+        return s3.get_bucket(self.bucket_name)
+
+    def worker(self):
+        bucket = self.get_bucket()
+
+        while True:
+            f = self.fileq.get()
+            keyname = self.build_keyname(f)
+            try:
+                self.upload_sstable(bucket, keyname, f)
+            except:
+                log.critical("Failed uploading %s. Aborting.\n%s" %
+                             (f, format_exc()))
+                # Brute force kill self
+                os.kill(os.getpid(), signal.SIGKILL)
+
+            self.fileq.task_done()
 
     def process_IN_MOVED_TO(self, event):
-        if event.pathname.find('-tmp') == -1:
-            keyname = '%s:%s' % (self.hostname, event.pathname)
-            key = self.bucket.get_key(keyname)
-            if key is None:
-                t = Thread(target=self.upload_sstable, args=(
-                           keyname, event.pathname))
-                t.setDaemon(True)
-                t.start()
-            else:
-                log.info("Keyname %s already exists, skipping upload" % keyname)
+        self.add_file(event.pathname)
 
-    def upload_sstable(self, keyname, filename, with_index=True):
-        log.info('Uploading %s' % filename)
+    #
+    # Check if this keyname (ie, file) has already been uploaded to
+    # the S3 bucket. This will verify that not only does the keyname
+    # exist, but that the MD5 sum is the same -- this protects against
+    # partial or corrupt uploads.
+    #
+    def keyname_exists(self, bucket, keyname, filename):
+        key = None
+        for r in range(self.retries):
+            try:
+                key = bucket.get_key(keyname)
+                if key == None:
+                    return False
+                else:
+                    break
+            except:
+                bucket = self.get_bucket()
+                continue
+
+        if key == None:
+            log.critical("Failed to lookup keyname %s after %d retries\n%s" %
+                         (keyname, self.retries, format_exc()))
+            raise
+
+        # Compute MD5 sum of file
+        try:
+            fp = open(filename, "r")
+        except IOError as (errno, strerror):
+            if errno == 2:
+                # The file was removed, return True to skip this file.
+                return True
+
+            log.critical("Failed to open file: %s (%s)\n%s" %
+                         (filename, strerror, format_exc()))
+            raise
+
+        md5 = key.compute_md5(fp)
+        fp.close
+
+        result = (md5[0] == key.etag.strip('"'))
+        if result:
+            log.info("Keyname %s already exists, skipping upload" % keyname)
+
+        return result
+
+    def upload_sstable(self, bucket, keyname, filename, with_index=True):
+        if self.keyname_exists(bucket, keyname, filename):
+            return
 
         def progress(sent, total):
             if sent == total:
                 log.info('Finished uploading %s' % filename)
 
         try:
+            log.info('Uploading %s' % filename)
+
             dirname = os.path.dirname(filename)
             if with_index:
-                key = self.bucket.new_key('%s-listdir.json' % keyname)
-                key.set_contents_from_string(
-                    json.dumps({dirname: os.listdir(dirname)}))
+                json_str = json.dumps({dirname: os.listdir(dirname)})
+                for r in range(self.retries):
+                    try:
+                        key = bucket.new_key('%s-listdir.json' % keyname)
+                        key.set_contents_from_string(json_str,
+                            headers={'Content-Type': 'application/json'},
+                            replace=True)
+                        break
+                    except:
+                        if r == self.retries - 1:
+                            log.critical("Failed to upload directory listing.")
+                            raise
+                        bucket = self.get_bucket()
+                        continue
 
-            key = self.bucket.new_key(keyname)
-            key.set_contents_from_filename(filename, replace=False, cb=progress)
+            # Include the file system metadata so that we have the
+            # option of using it to restore the file modes correctly.
+            #
+            try:
+                stat = os.stat(filename)
+            except OSError:
+                # File removed?
+                return
+
+            meta = {'uid': stat.st_uid,
+                    'gid': stat.st_gid,
+                    'mode': stat.st_mode}
+            try:
+                u = pwd.getpwuid(stat.st_uid)
+                meta['user'] = u.pw_name
+            except:
+                pass
+
+            try:
+                g = grp.getgrgid(stat.st_gid)
+                meta['group'] = g.gr_name
+            except:
+                pass
+
+            for r in range(self.retries):
+                try:
+                    key = bucket.new_key(keyname)
+                    key.set_metadata('stat', json.dumps(meta))
+                    key.set_contents_from_filename(filename, replace=True,
+                                                   cb=progress, num_cb=1)
+                    break
+                except:
+                    if not os.path.exists(filename):
+                        # File was removed? Skip
+                        return
+
+                    if r == self.retries - 1:
+                        log.critical("Failed to upload file contents.")
+                        raise
+                    bucket = self.get_bucket()
+                    continue
+
         except:
             log.error('Error uploading %s\n%s' % (keyname, format_exc()))
+            raise
 
 
-def backup_files(handler, bucket, paths):
+def backup_files(handler, paths):
     for path in paths:
         log.info('Backing up %s' % path)
         for filename in os.listdir(path):
             if filename.find('-tmp') != -1:
                 continue
-            keyname = '%s:%s/%s' % (handler.hostname, path, filename)
-            if not bucket.get_key(keyname):
-                handler.upload_sstable(keyname, '%s/%s' % (path, filename), with_index=False)
-            else:
-                log.info('Not uploading %s/%s, it already exists in this S3 bucket.' % (path, filename))
+
+            fullpath = '%s/%s' % (path, filename)
+            if os.path.isdir(fullpath):
+                continue
+
+            handler.add_file(fullpath)
     return 0
 
 
@@ -79,8 +218,12 @@ def main():
         help='Recursively watch the given path(s)s for new SSTables')
     parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False,
         help='Automatically start watching new subdirectories within path(s)')
-    parser.add_option('-B', '--backup', action='store_true', dest='backup',
-        help='Backup existing SSTables to S3 if they\'re not already there')
+    parser.add_option('-p', '--prefix', dest='prefix', default=None,
+        help='Set a string prefix for uploaded files in S3')
+    parser.add_option('-t', '--threads', dest='threads', default=default_threads,
+                      help='Number of writer threads')
+    parser.add_option('-n', '--name', dest='name', default=None,
+        help='Use this name instead of the FQDN to identify the SSTables from this host')
     options, args = parser.parse_args()
 
     if len(args) < 2:
@@ -90,20 +233,26 @@ def main():
     bucket = args[0]
     paths = args[1:]
 
+    # Check S3 credentials only. We reconnect per-thread to avoid any
+    # potential thread-safety problems.
     s3 = boto.connect_s3(options.aws_key, options.aws_secret)
     bucket = s3.get_bucket(bucket)
-    handler = UploadHandler(bucket=bucket)
 
-    if options.backup:
-        return backup_files(handler, bucket, paths)
+    handler = UploadHandler(threads=options.threads, key=options.aws_key,
+                            secret=options.aws_secret, bucket_name=bucket,
+                            prefix=options.prefix, name=options.name)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
     for path in paths:
-        ret = wm.add_watch(path, pyinotify.ALL_EVENTS, rec=options.recursive, auto_add=options.auto_add)
+        ret = wm.add_watch(path, pyinotify.IN_MOVED_TO, rec=options.recursive,
+                           auto_add=options.auto_add)
         if ret[path] == -1:
             log.critical('add_watch failed for %s, bailing out!' % path)
             return 1
+
+    backup_files(handler, paths)
+
     notifier.loop()
 
 if __name__ == '__main__':
