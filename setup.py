@@ -5,7 +5,7 @@ setup(
     version='0.4.3',
     author='Jeremy Grosser',
     author_email='jeremy@synack.me',
-    scripts=['tablesnap'],
+    scripts=['tablesnap', 'tableslurp'],
     install_requires=[
         'pyinotify',
         'boto',
