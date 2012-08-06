@@ -158,12 +158,10 @@ class DownloadHandler(object):
     def _worker(self, idx, subset, event):
         log.info('Thread #%d will process %d items' % (idx, len(subset),))
         bucket = self._get_bucket()
-        cancelled = False
         for fname in subset:
             if event.is_set():
                 log.info('Thread #%d got cancelled' % (idx,))
-                cancelled = True
-                break
+                return
             key = '%s/%s' % (self.prefix, fname,)
             destfile = os.path.join(self.target, os.path.basename(fname))
             download = False
@@ -189,8 +187,7 @@ class DownloadHandler(object):
                 log.debug(e)
                 log.warning('Failed to download `%s`' % (fname,))
                 continue
-        if not cancelled:
-            log.info('Thread #%d finished processing' % (idx,))
+        log.info('Thread #%d finished processing' % (idx,))
 
     def run(self):
         self._test_permissions()
