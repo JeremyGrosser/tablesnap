@@ -14,7 +14,6 @@ import sys
 import os
 import pwd
 import grp
-import time
 import signal
 
 log = logging.getLogger('tablesnap')
@@ -108,11 +107,11 @@ class UploadHandler(pyinotify.ProcessEvent):
                 return True
 
             log.critical("Failed to open file: %s (%s)\n%s" %
-                         (filename, strerror, format_exc()))
+                         (filename, strerror, format_exc(),))
             raise
 
         md5 = key.compute_md5(fp)
-        fp.close
+        fp.close()
 
         result = (md5[0] == key.etag.strip('"'))
         if result:
