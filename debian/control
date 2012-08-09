@@ -7,5 +7,5 @@ Standards-Version: 3.8.3
 
 Package: tablesnap
 Architecture: any
-Depends: ${python:Depends}, python-pyinotify, python-boto
+Depends: ${python:Depends}, python-pyinotify, python-boto, python-dateutil
 Description: Uses inotify to monitor Cassandra SSTables and upload them to S3
