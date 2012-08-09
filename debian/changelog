@@ -1,3 +1,11 @@
+tablesnap (0.4.3) lucid; urgency=low
+
+  [ Jorge Gallegos ]
+  * Merged librato branch up to 0.4.3
+  * Added tableslurp restore command
+
+ -- Jorge Gallegos <kad@eventbrite.com>  Wed, 08 Aug 2012 22:26:08 -0700
+
 tablesnap (0.2-1sg12) maverick; urgency=low
 
   [ Jeremy Grosser ]
