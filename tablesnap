@@ -15,6 +15,8 @@ import os
 import pwd
 import grp
 import signal
+import tempfile
+import StringIO
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
@@ -28,9 +30,16 @@ default_threads = 4
 # Default retries
 default_retries = 3
 
+# Max file size to upload without doing multipart
+max_upload_size = 4 * 1024 * 1024
+
+# Default chunk size for multipart uploads
+default_chunk_size = 1 * 1024 * 1024
+
+
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
-                prefix=None, name=None):
+                prefix=None, name=None, tempdir=None):
         self.key = key
         self.secret = secret
         self.bucket_name = bucket_name
@@ -38,6 +47,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.name = name or socket.getfqdn()
         self.retries = default_retries
         self.fileq = Queue()
+        self.tempdir = tempdir or tempfile.gettempdir()
         for i in range(int(threads)):
             t = Thread(target=self.worker)
             t.daemon = True
@@ -119,6 +129,17 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         return result
 
+    def split_sstable(self, filename):
+        log.debug('Splitting %s in %d-size chunks' % (filename, default_chunk_size))
+
+        f = open(filename, 'rb')
+        while True:
+            chunk = f.read(default_chunk_size)
+            if chunk:
+                yield chunk
+            else:
+                break
+
     def upload_sstable(self, bucket, keyname, filename, with_index=True):
         if self.keyname_exists(bucket, keyname, filename):
             return
@@ -128,8 +149,6 @@ class UploadHandler(pyinotify.ProcessEvent):
                 log.info('Finished uploading %s' % filename)
 
         try:
-            log.info('Uploading %s' % filename)
-
             dirname = os.path.dirname(filename)
             if with_index:
                 json_str = json.dumps({dirname: os.listdir(dirname)})
@@ -171,12 +190,24 @@ class UploadHandler(pyinotify.ProcessEvent):
             except:
                 pass
 
+            log.info('Uploading %s' % filename)
+
             for r in range(self.retries):
                 try:
-                    key = bucket.new_key(keyname)
+                    if stat.st_size > max_upload_size:
+                        mp = bucket.initiate_multipart_upload(keyname)
+                        part = 1
+                        for chunk in self.split_sstable(filename):
+                            sio = StringIO.StringIO(chunk)
+                            mp.upload_part_from_file(sio, part, replace=True,
+                                                     cb=progress, num_cb=1)
+                            sio.close()
+                            sio = None
+                    else:
+                        key = bucket.new_key(keyname)
+                        key.set_contents_from_filename(filename, replace=True,
+                                                       cb=progress, num_cb=1)
                     key.set_metadata('stat', json.dumps(meta))
-                    key.set_contents_from_filename(filename, replace=True,
-                                                   cb=progress, num_cb=1)
                     break
                 except:
                     if not os.path.exists(filename):
@@ -223,6 +254,8 @@ def main():
                       help='Number of writer threads')
     parser.add_option('-n', '--name', dest='name', default=None,
         help='Use this name instead of the FQDN to identify the SSTables from this host')
+    parser.add_option('--temp-dir', dest='temp_dir', default=tempfile.gettempdir(),
+        help='Use this temporary directory for transient files')
     options, args = parser.parse_args()
 
     if len(args) < 2:
@@ -239,7 +272,8 @@ def main():
 
     handler = UploadHandler(threads=options.threads, key=options.aws_key,
                             secret=options.aws_secret, bucket_name=bucket,
-                            prefix=options.prefix, name=options.name)
+                            prefix=options.prefix, name=options.name,
+                            tempdir=options.temp_dir)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
