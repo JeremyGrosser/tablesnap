@@ -16,12 +16,16 @@ import pwd
 import grp
 import signal
 import StringIO
+import hashlib
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
 stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 log.addHandler(stderr)
-log.setLevel(logging.DEBUG)
+if os.environ.get('TDEBUG', False):
+    log.setLevel(logging.DEBUG)
+else:
+    log.setLevel(logging.INFO)
 
 # Default number of writer threads
 default_threads = 4
@@ -29,8 +33,8 @@ default_threads = 4
 # Default retries
 default_retries = 3
 
-# Max file size to upload without doing multipart
-max_file_size = 5
+# Max file size to upload without doing multipart in MB
+max_file_size = 5120
 
 # Default chunk size for multipart uploads in MB
 default_chunk_size = 100
@@ -47,9 +51,9 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.retries = default_retries
 
         if max_size:
-            self.max_size = max_size * 2**30
+            self.max_size = max_size * 2**20
         else:
-            self.max_size = max_file_size * 2**30
+            self.max_size = max_file_size * 2**20
 
         if chunk_size:
             self.chunk_size = chunk_size * 2**20
@@ -105,8 +109,10 @@ class UploadHandler(pyinotify.ProcessEvent):
             try:
                 key = bucket.get_key(keyname)
                 if key == None:
+                    log.debug('Key %s does not exist' % (keyname,))
                     return False
                 else:
+                    log.debug('Found key %s' % (keyname,))
                     break
             except:
                 bucket = self.get_bucket()
@@ -130,6 +136,7 @@ class UploadHandler(pyinotify.ProcessEvent):
             raise
 
         md5 = key.compute_md5(fp)
+        log.debug('Computed md5: %s' % (md5,))
         fp.close()
 
         result = (md5[0] == key.etag.strip('"'))
@@ -139,15 +146,20 @@ class UploadHandler(pyinotify.ProcessEvent):
         return result
 
     def split_sstable(self, filename):
-        log.debug('Splitting %s in %d-size chunks' % (filename, self.chunk_size))
+        log.debug('Reading %s in %d byte sized chunks' % (filename, self.chunk_size))
 
         f = open(filename, 'rb')
         while True:
-            chunk = f.read(self.chunk_size)
-            if chunk:
-                yield chunk
-            else:
+            try:
+                chunk = f.read(self.chunk_size)
+                if chunk:
+                    yield StringIO.StringIO(chunk)
+                else:
+                    break
+            except:
                 break
+        if f and not f.closed:
+            f.close()
 
     def upload_sstable(self, bucket, keyname, filename, with_index=True):
         if self.keyname_exists(bucket, keyname, filename):
@@ -205,22 +217,27 @@ class UploadHandler(pyinotify.ProcessEvent):
 
             for r in range(self.retries):
                 try:
+                    log.debug('%s > %s ? %s' % (stat.st_size, self.max_size, (stat.st_size > self.max_size),))
                     if stat.st_size > self.max_size:
+                        log.info('Performing multipart upload')
                         mp = bucket.initiate_multipart_upload(keyname,
                             metadata={'stat': meta})
                         part = 1
                         try:
                             for chunk in self.split_sstable(filename):
-                                sio = StringIO.StringIO(chunk)
-                                mp.upload_part_from_file(sio, part)
-                                sio.close()
-                                sio = None
-                        except:
-                            log.debug('Error uploading part %d' % (part,))
+                                log.debug('Uploading part #%d (size: %d)' % (part, chunk.len,))
+                                mp.upload_part_from_file(chunk, part)
+                                chunk.close()
+                                part += 1
+                            part -= 1
+                        except Exception as e:
+                            log.debug(e)
+                            log.info('Error uploading part %d' % (part,))
                             mp.cancel_upload()
-                            if sio:
-                                sio.close()
+                            if chunk:
+                                chunk.close()
                             raise
+                        log.debug('Uploaded %d parts, completing upload' % (part,))
                         mp.complete_upload()
                         progress(100, 100)
                     else:
@@ -276,10 +293,12 @@ def main():
         help='Use this name instead of the FQDN to identify the SSTables from this host')
     parser.add_option('--max-upload-size', dest='max_upload_size',
         default=max_file_size,
-        help='Max size for files to be uploaded before doing multipart')
+        help='Max size for files to be uploaded before doing multipart '
+        '(default %dM)' % max_file_size)
     parser.add_option('--multipart-chunk-size', dest='multipart_chunk_size',
         default=default_chunk_size,
-        help='Chunk size for multipart uploads')
+        help='Chunk size for multipart uploads (default: %dM)' %
+        (default_chunk_size,))
     options, args = parser.parse_args()
 
     if len(args) < 2:
@@ -297,8 +316,8 @@ def main():
     handler = UploadHandler(threads=options.threads, key=options.aws_key,
                             secret=options.aws_secret, bucket_name=bucket,
                             prefix=options.prefix, name=options.name,
-                            max_size=options.max_upload_size,
-                            multipart_chunk_size=options.multipart_chunk_size)
+                            max_size=int(options.max_upload_size),
+                            chunk_size=int(options.multipart_chunk_size))
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
