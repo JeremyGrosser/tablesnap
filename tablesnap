@@ -124,8 +124,10 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         if key.size != stat.st_size:
             log.warning('ATTENTION: your source (%s) and target (%s) sizes '
-                'differ, you should take a look. Will skip this file to '
-                'avoid future complications' % (filename, keyname, ))
+                'differ, you should take a look. As immutable files '
+                'never change, one must assume the local file got corrupted '
+                'and the right version is the one in S3. Will skip this file '
+                'to avoid future complications' % (filename, keyname, ))
             return True
         else:
             # Compute MD5 sum of file
@@ -159,7 +161,9 @@ class UploadHandler(pyinotify.ProcessEvent):
             log.info("Keyname %s already exists, skipping upload" % keyname)
         else:
             log.warning('ATTENTION: your source (%s) and target (%s) MD5 '
-                'hashes differ, you should take a look. Will skip this file '
+                'hashes differ, you should take a look. As immutable files '
+                'never change, one must assume the local file got corrupted '
+                'and the right version is the one in S3. Will skip this file '
                 'to avoid future complications' % (filename, keyname, ))
             return True
 
