@@ -16,7 +16,6 @@ import pwd
 import grp
 import signal
 import StringIO
-import hashlib
 
 log = logging.getLogger('tablesnap')
 stderr = logging.StreamHandler()
@@ -37,7 +36,7 @@ default_retries = 3
 max_file_size = 5120
 
 # Default chunk size for multipart uploads in MB
-default_chunk_size = 100
+default_chunk_size = 256
 
 
 class UploadHandler(pyinotify.ProcessEvent):
@@ -58,7 +57,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         if chunk_size:
             self.chunk_size = chunk_size * 2**20
         else:
-            self.chunk_size = default_chunk_size * 2**20
+            self.chunk_size = None
 
         self.fileq = Queue()
         for i in range(int(threads)):
@@ -103,7 +102,7 @@ class UploadHandler(pyinotify.ProcessEvent):
     # exist, but that the MD5 sum is the same -- this protects against
     # partial or corrupt uploads.
     #
-    def keyname_exists(self, bucket, keyname, filename):
+    def key_exists(self, bucket, keyname, filename, stat):
         key = None
         for r in range(self.retries):
             try:
@@ -123,47 +122,99 @@ class UploadHandler(pyinotify.ProcessEvent):
                          (keyname, self.retries, format_exc()))
             raise
 
-        # Compute MD5 sum of file
-        try:
-            fp = open(filename, "r")
-        except IOError as (errno, strerror):
-            if errno == 2:
-                # The file was removed, return True to skip this file.
-                return True
+        if key.size != stat.st_size:
+            log.warning('ATTENTION: your source (%s) and target (%s) sizes '
+                'differ, you should take a look. Will skip this file to '
+                'avoid future complications' % (filename, keyname, ))
+            return True
+        else:
+            # Compute MD5 sum of file
+            try:
+                fp = open(filename, "r")
+            except IOError as (errno, strerror):
+                if errno == 2:
+                    # The file was removed, return True to skip this file.
+                    return True
 
-            log.critical("Failed to open file: %s (%s)\n%s" %
-                         (filename, strerror, format_exc(),))
-            raise
+                log.critical("Failed to open file: %s (%s)\n%s" %
+                             (filename, strerror, format_exc(),))
+                raise
 
-        md5 = key.compute_md5(fp)
-        log.debug('Computed md5: %s' % (md5,))
-        fp.close()
+            md5 = key.compute_md5(fp)
+            fp.close()
+            log.debug('Computed md5: %s' % (md5,))
 
-        result = (md5[0] == key.etag.strip('"'))
+            meta = key.get_metadata('md5sum')
+
+            if meta:
+                log.debug('MD5 metadata comparison: %s == %s? : %s' % (md5[0], meta, (md5[0] == meta)))
+                result = (md5[0] == meta)
+            else:
+                log.debug('ETag comparison: %s == %s? : %s' % (md5[0], key.etag.strip('"'), (md5[0] == key.etag.strip('"'))))
+                result = (md5[0] == key.etag.strip('"'))
+                if result:
+                    log.debug('Setting missing md5sum metadata for %s' % (keyname,))
+                    key.set_metadata('md5sum', md5[0])
         if result:
             log.info("Keyname %s already exists, skipping upload" % keyname)
+        else:
+            log.warning('ATTENTION: your source (%s) and target (%s) MD5 '
+                'hashes differ, you should take a look. Will skip this file '
+                'to avoid future complications' % (filename, keyname, ))
+            return True
 
         return result
 
-    def split_sstable(self, filename):
-        log.debug('Reading %s in %d byte sized chunks' % (filename, self.chunk_size))
+    def get_free_memory_in_kb(self):
+        f = open('/proc/meminfo', 'r')
+        memlines = f.readlines()
+        f.close()
+        lines = []
+        for line in memlines:
+            ml = line.rstrip(' kB\n').split(':')
+            lines.append((ml[0], int(ml[1].strip())))
+        d = dict(lines)
+        return d['Cached'] + d['MemFree'] + d['Buffers']
 
+    def split_sstable(self, filename):
+        free = self.get_free_memory_in_kb() * 1024
+        log.debug('Free memory check: %d < %d ? : %s' %
+            (free, self.chunk_size, (free < self.chunk_size)))
+        if free < self.chunk_size:
+            log.warn('Your system is low on memory, reading in smaller chunks')
+            chunk_size = free / 20
+        else:
+            chunk_size = self.chunk_size
+        log.debug('Reading %s in %d byte sized chunks' %
+            (filename, chunk_size))
         f = open(filename, 'rb')
         while True:
-            try:
-                chunk = f.read(self.chunk_size)
-                if chunk:
-                    yield StringIO.StringIO(chunk)
-                else:
-                    break
-            except:
+            chunk = f.read(chunk_size)
+            if chunk:
+                yield StringIO.StringIO(chunk)
+            else:
                 break
         if f and not f.closed:
             f.close()
 
     def upload_sstable(self, bucket, keyname, filename, with_index=True):
-        if self.keyname_exists(bucket, keyname, filename):
+
+        # Include the file system metadata so that we have the
+        # option of using it to restore the file modes correctly.
+        #
+        try:
+            stat = os.stat(filename)
+        except OSError:
+            # File removed?
             return
+
+        if self.key_exists(bucket, keyname, filename, stat):
+            return
+        else:
+            fp = open(filename, 'rb')
+            md5 = boto.utils.compute_md5(fp)
+            log.debug('Computed md5sum before upload is: %s' % (md5,))
+            fp.close()
 
         def progress(sent, total):
             if sent == total:
@@ -187,15 +238,6 @@ class UploadHandler(pyinotify.ProcessEvent):
                         bucket = self.get_bucket()
                         continue
 
-            # Include the file system metadata so that we have the
-            # option of using it to restore the file modes correctly.
-            #
-            try:
-                stat = os.stat(filename)
-            except OSError:
-                # File removed?
-                return
-
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
                     'mode': stat.st_mode}
@@ -217,12 +259,14 @@ class UploadHandler(pyinotify.ProcessEvent):
 
             for r in range(self.retries):
                 try:
-                    log.debug('%s > %s ? %s' % (stat.st_size, self.max_size, (stat.st_size > self.max_size),))
+                    log.debug('File size check: %s > %s ? : %s' %
+                        (stat.st_size, self.max_size, (stat.st_size > self.max_size),))
                     if stat.st_size > self.max_size:
-                        log.info('Performing multipart upload')
+                        log.info('Performing multipart upload for %s' % (filename))
                         mp = bucket.initiate_multipart_upload(keyname,
-                            metadata={'stat': meta})
+                            metadata={'stat': meta, 'md5sum': md5[0]})
                         part = 1
+                        chunk = None
                         try:
                             for chunk in self.split_sstable(filename):
                                 log.debug('Uploading part #%d (size: %d)' % (part, chunk.len,))
@@ -241,10 +285,13 @@ class UploadHandler(pyinotify.ProcessEvent):
                         mp.complete_upload()
                         progress(100, 100)
                     else:
+                        log.debug('Performing monolithic upload')
                         key = bucket.new_key(keyname)
+                        key.set_metadata('stat', meta)
+                        key.set_metadata('md5sum', md5[0])
                         key.set_contents_from_filename(filename, replace=True,
-                                                       cb=progress, num_cb=1)
-                    key.set_metadata('stat', meta)
+                                                       cb=progress, num_cb=1,
+                                                       md5=md5)
                     break
                 except:
                     if not os.path.exists(filename):
@@ -297,7 +344,8 @@ def main():
         '(default %dM)' % max_file_size)
     parser.add_option('--multipart-chunk-size', dest='multipart_chunk_size',
         default=default_chunk_size,
-        help='Chunk size for multipart uploads (default: %dM)' %
+        help='Chunk size for multipart uploads (default: %dM or 10%% of '
+        'free memory if default is not available)' %
         (default_chunk_size,))
     options, args = parser.parse_args()
 
