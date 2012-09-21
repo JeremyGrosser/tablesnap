@@ -153,9 +153,6 @@ class DownloadHandler(object):
         except Exception as e:
             log.error(e)
             log.info('%s exists' % (self.target,))
-        finally:
-            if os.path.isfile(self.target):
-                os.remove(selft.target)
         log.info('Will write to %s' % (self.target,))
 
     def _worker(self, idx, subset, event):
