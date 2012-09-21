@@ -143,16 +143,17 @@ class DownloadHandler(object):
             (self.target,))
         try:
             log.debug('Creating temp file in %s' % (self.target,))
-            (fd, t) = tempfile.mkstemp(dir=self.target)
+            if os.path.isdir(fpath) != true :
+             	 os.makedirs(self.target)
             log.debug('Changing owner:group for %s to %s:%s' %
-                (t, self.owner, self.group,))
-            os.chown(t, self.owner, self.group)
+                (self.target, self.owner, self.group,))
+            os.chown(self.target, self.owner, self.group)
         except Exception as e:
             log.debug(e)
             log.critical('Cannot write to %s' % (self.target,))
         finally:
-            if os.path.isfile(t):
-                os.remove(t)
+            if os.path.isfile(self.target):
+                os.remove(selft.target)
         log.info('Will write to %s' % (self.target,))
 
     def _worker(self, idx, subset, event):
