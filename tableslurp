@@ -142,15 +142,17 @@ class DownloadHandler(object):
         log.info('Will now try to test writing to the target dir %s' %
             (self.target,))
         try:
-            log.debug('Creating temp file in %s' % (self.target,))
-            if os.path.isdir(fpath) != true :
-             	 os.makedirs(self.target)
+
+            if os.path.isdir(self.target) == False :
+                log.debug('Creating temp file in %s' % (self.target,))
+                os.makedirs(self.target)
             log.debug('Changing owner:group for %s to %s:%s' %
                 (self.target, self.owner, self.group,))
+                
             os.chown(self.target, self.owner, self.group)
         except Exception as e:
-            log.debug(e)
-            log.critical('Cannot write to %s' % (self.target,))
+            log.error(e)
+            log.info('%s exists' % (self.target,))
         finally:
             if os.path.isfile(self.target):
                 os.remove(selft.target)
