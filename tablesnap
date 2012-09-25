@@ -30,7 +30,10 @@ else:
 default_threads = 4
 
 # Default retries
-default_retries = 3
+default_retries = 1
+
+# S3 limit for single file upload
+s3_limit = 5 * 2**30
 
 # Max file size to upload without doing multipart in MB
 max_file_size = 5120
@@ -164,6 +167,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                     self.log.debug('Setting missing md5sum metadata for %s' %
                                   (keyname,))
                     key.set_metadata('md5sum', md5[0])
+        
         if result:
             self.log.info("Keyname %s already exists, skipping upload"
                           % (keyname))
@@ -323,11 +327,13 @@ class UploadHandler(pyinotify.ProcessEvent):
                         raise
                     bucket = self.get_bucket()
                     continue
-
         except:
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
+def backup_file(handler, filename, filedir):
+    if filename.find('-tmp') != -1:
+        return
 
 def backup_files(handler, paths, log=default_log):
     for path in paths:
@@ -335,12 +341,18 @@ def backup_files(handler, paths, log=default_log):
         for filename in os.listdir(path):
             if filename.find('-tmp') != -1:
                 continue
+    handler.add_file(fullpath)
 
-            fullpath = '%s/%s' % (path, filename)
-            if os.path.isdir(fullpath):
-                continue
-
-            handler.add_file(fullpath)
+def backup_files(handler, paths, recurse):
+    for path in paths:
+        log.info('Backing up %s' % path)
+        if recurse:
+            for root, dirs, files in os.walk(path):
+                for filename in files:
+                    backup_file(handler, filename, root)
+        else:
+            for filename in os.listdir(path):
+                backup_file(handler, filename, path)
     return 0
 
 
@@ -397,7 +409,7 @@ def main():
                                 (path))
             return 1
 
-    backup_files(handler, paths)
+    backup_files(handler, paths, options.recursive)
 
     notifier.loop()
 

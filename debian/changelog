@@ -1,3 +1,11 @@
+tablesnap (0.6.0-1) precise; urgency=low
+
+  * Multipart uploads to S3
+  * Configurable logging
+  * I/O thread with retry logic
+
+ -- Jeremy Grosser <jeremy@synack.me>  Tue, 25 Sep 2012 23:05:42 +0000
+
 tablesnap (0.4.3-2) lucid; urgency=low
 
   * Adding python-dateutil
