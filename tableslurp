@@ -30,6 +30,7 @@ import socket
 import sys
 import tempfile
 import time
+from Queue import Queue
 
 log = logging.getLogger('tableslurp')
 stderr = logging.StreamHandler()
@@ -56,6 +57,7 @@ class DownloadHandler(object):
     force = False
     name = socket.getfqdn()
     fileset = []
+    queue = Queue()
     num_threads = 4
     threads = {}
 
@@ -142,95 +144,79 @@ class DownloadHandler(object):
         log.info('Will now try to test writing to the target dir %s' %
             (self.target,))
         try:
-            log.debug('Creating temp file in %s' % (self.target,))
-            (fd, t) = tempfile.mkstemp(dir=self.target)
+
+            if os.path.isdir(self.target) == False :
+                log.debug('Creating temp file in %s' % (self.target,))
+                os.makedirs(self.target)
             log.debug('Changing owner:group for %s to %s:%s' %
-                (t, self.owner, self.group,))
-            os.chown(t, self.owner, self.group)
+                (self.target, self.owner, self.group,))
+                
+            os.chown(self.target, self.owner, self.group)
         except Exception as e:
-            log.debug(e)
-            log.critical('Cannot write to %s' % (self.target,))
-        finally:
-            if os.path.isfile(t):
-                os.remove(t)
+            log.error(e)
+            log.info('%s exists' % (self.target,))
         log.info('Will write to %s' % (self.target,))
 
-    def _worker(self, idx, subset, event):
-        log.info('Thread #%d will process %d items' % (idx, len(subset),))
+    def _worker(self, idx, queue):
+        log.info('Thread #%d processing items' % (idx, ))
         bucket = self._get_bucket()
-        for fname in subset:
-            if event.is_set():
-                log.info('Thread #%d got cancelled' % (idx,))
-                return
-            key = '%s/%s' % (self.prefix, fname,)
-            destfile = os.path.join(self.target, os.path.basename(fname))
-            download = False
-            try:
-                key = bucket.get_key(key)
-                if os.path.isfile(destfile):
-                    stat = os.stat(destfile)
-                    if self.force:
-                        download = True
-                    elif stat.st_size != key.size:
-                        log.info('%s and %s size differs, will re-download' %
-                            (key.name, destfile,))
-                        download = True
-                    else:
-                        pass
-                else:
-                    download = True
-                if download:
-                    log.debug('Downloading %s from %s to %s' %
-                        (key.name, bucket.name, destfile))
-                    key.get_contents_to_filename(destfile)
-            except Exception as e:
-                log.debug(e)
-                log.warning('Failed to download `%s`' % (fname,))
-                continue
+        
+        while queue.empty() == False:
+			fname = queue.get()
+			keypath = '%s/%s' % (self.prefix, fname,)
+			destfile = os.path.join(self.target, os.path.basename(fname))
+			
+			log.debug('Checking if we need to download %s to %s' % (keypath, destfile,))
+			
+			download = False
+			#Retry downloading until we succeed
+			try:
+				key = bucket.get_key(keypath)
+				log.debug('Key objectd is %s' % key)
+				if os.path.isfile(destfile):
+					stat = os.stat(destfile)
+					if self.force:
+						download = True
+					elif stat.st_size != key.size:
+						log.info('%s and %s size differs, will re-download' %
+							(key.name, destfile,))
+						download = True
+				else:
+					download = True
+				
+				if download:
+					log.info('Downloading %s from %s to %s' % (key.name, bucket.name, destfile))
+					key.get_contents_to_filename(destfile)
+			except Exception as e:
+				log.error(e)
+				log.warning('Failed to download `%s` retrying' % (fname,))
+				#We can't download, try again TODO
+			queue.task_done()
+		
+			
         log.info('Thread #%d finished processing' % (idx,))
 
     def run(self):
         self._test_permissions()
         log.info('Running')
 
-#       Slice the fileset into as many subsets as threads we want to run
-        slices = [self.fileset[_::self.num_threads] \
-            for _ in range(self.num_threads)]
-        log.info('Will spawn %d workers for %d slices' %
-            (self.num_threads, len(slices)))
-
+        #queue up the filesets
+        for file in self.fileset:
+            log.info('Pushing file %s onto queue' % file)
+            self.queue.put(file)
+        
 #       launch threads and attach an event to them
-        for idx in range(0, len(slices)):
+        for idx in range(0, self.num_threads):
             self.threads[idx] = {}
-            e = threading.Event()
+#            e = threading.Event()
             t = threading.Thread(target=self._worker,
-                kwargs={'idx': idx, 'subset': slices[idx], 'event': e})
+                kwargs={'idx': idx, 'queue': self.queue})
             t.daemon = True
-            self.threads[idx]['event'] = e
-            self.threads[idx]['thread'] = t
-            self.threads[idx]['thread'].start()
+            self.threads[idx]= t
+            t.start()
 
-        try:
-            c = 0
-            while True:
-#               Get the list of running threads, minus the main thread
-                active = threading.enumerate()
-                active.remove(threading.current_thread())
-                if len(active) == 0:
-                    break
-#               Report progress every 30 seconds (15 times * time.sleep(2))
-                c = c + 1
-                time.sleep(2)
-                if c >= 15:
-                    log.info('Current threads running: %d' % (len(active)))
-                    c = 0
-        except:
-            log.info('Waiting for %d threads to finish...' % (len(active)))
-#           send "stop signals"
-            for idx, thread in self.threads.items():
-                thread['event'].set()
-            for idx, thread in self.threads.items():
-                thread['thread'].join()
+        #Wait for everything to finish downloading
+        self.queue.join()
         log.info('My job is done.')
 
 
