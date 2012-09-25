@@ -42,6 +42,17 @@ if os.environ.get('TDEBUG', False):
 else:
     log.setLevel(logging.INFO)
 
+class DownloadCounter(object):
+	file = None
+	attemptcount = 0
+	
+	def __init__(self,file):
+		self.file = file
+
+	def increment(self):
+		self.attemptcount += 1
+		
+
 
 class DownloadHandler(object):
 
@@ -162,37 +173,48 @@ class DownloadHandler(object):
         bucket = self._get_bucket()
         
         while queue.empty() == False:
-			fname = queue.get()
+			queueddownload = queue.get()
+			fname = queueddownload.file
 			keypath = '%s/%s' % (self.prefix, fname,)
 			destfile = os.path.join(self.target, os.path.basename(fname))
 			
 			log.debug('Checking if we need to download %s to %s' % (keypath, destfile,))
 			
-			download = False
-			#Retry downloading until we succeed
-			try:
-				key = bucket.get_key(keypath)
-				log.debug('Key objectd is %s' % key)
-				if os.path.isfile(destfile):
-					stat = os.stat(destfile)
-					if self.force:
+			if queueddownload.attemptcount < 5 :
+				download = False
+				#Retry downloading until we succeed
+				try:
+					key = bucket.get_key(keypath)
+					log.debug('Key objectd is %s' % key)
+					if os.path.isfile(destfile):
+						stat = os.stat(destfile)
+						if self.force:
+							download = True
+						elif stat.st_size != key.size:
+							log.info('%s and %s size differs, will re-download' %
+								(key.name, destfile,))
+							download = True
+					else:
 						download = True
-					elif stat.st_size != key.size:
-						log.info('%s and %s size differs, will re-download' %
-							(key.name, destfile,))
-						download = True
-				else:
-					download = True
-				
-				if download:
-					log.info('Downloading %s from %s to %s' % (key.name, bucket.name, destfile))
-					key.get_contents_to_filename(destfile)
-			except Exception as e:
-				log.error(e)
-				log.warning('Failed to download `%s` retrying' % (fname,))
-				#We can't download, try again TODO
+					
+					if download:
+						log.info('Downloading %s from %s to %s' % (key.name, bucket.name, destfile))
+						key.get_contents_to_filename(destfile)
+					
+					
+				except Exception as e:
+					log.error(e)
+					log.warning('Failed to download `%s` retrying' % (fname,))
+					#We can't download, try again 
+					queueddownload.increment()
+					queue.put(queueddownload)
+					
+			else:
+				log.info('Tried to download %s too many times.  Giving up' % fname)
+
+			#Pop the task regardless of state.  If it fails we've put it back
 			queue.task_done()
-		
+				
 			
         log.info('Thread #%d finished processing' % (idx,))
 
@@ -203,7 +225,7 @@ class DownloadHandler(object):
         #queue up the filesets
         for file in self.fileset:
             log.info('Pushing file %s onto queue' % file)
-            self.queue.put(file)
+            self.queue.put(DownloadCounter(file))
         
 #       launch threads and attach an event to them
         for idx in range(0, self.num_threads):
