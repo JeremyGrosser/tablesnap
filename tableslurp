@@ -43,11 +43,11 @@ else:
     log.setLevel(logging.INFO)
 
 class DownloadCounter(object):
-	file = None
+	filename = None
 	attemptcount = 0
 	
-	def __init__(self,file):
-		self.file = file
+	def __init__(self,filename):
+		self.filename = filename
 
 	def increment(self):
 		self.attemptcount += 1
@@ -164,8 +164,8 @@ class DownloadHandler(object):
                 
             os.chown(self.target, self.owner, self.group)
         except Exception as e:
-            log.error(e)
-            log.info('%s exists' % (self.target,))
+			log.exception(e)
+			log.exception('%s exists' % (self.target,))
         log.info('Will write to %s' % (self.target,))
 
     def _worker(self, idx, queue):
@@ -174,7 +174,7 @@ class DownloadHandler(object):
         
         while queue.empty() == False:
 			queueddownload = queue.get()
-			fname = queueddownload.file
+			fname = queueddownload.filename
 			keypath = '%s/%s' % (self.prefix, fname,)
 			destfile = os.path.join(self.target, os.path.basename(fname))
 			
