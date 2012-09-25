@@ -229,7 +229,7 @@ class DownloadHandler(object):
 #            e = threading.Event()
             t = threading.Thread(target=self._worker,
                 kwargs={'idx': idx, 'queue': self.queue})
-            t.daemon = True
+            t.setDaemon(True)
             self.threads[idx]= t
             t.start()
 
