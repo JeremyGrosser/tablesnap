@@ -28,8 +28,6 @@ import os
 import pwd
 import socket
 import sys
-import tempfile
-import time
 from Queue import Queue
 
 log = logging.getLogger('tableslurp')
@@ -42,10 +40,11 @@ if os.environ.get('TDEBUG', False):
 else:
     log.setLevel(logging.INFO)
 
+
 class DownloadCounter(object):
     filename = None
     attemptcount = 0
-    
+
     def __init__(self, filename):
         self.filename = filename
 
@@ -116,8 +115,8 @@ class DownloadHandler(object):
                 (self.prefix, target_file))
 #       Otherwise try to fetch the most recent one
         else:
-            keys = [_ for _ in bucket.get_all_keys(prefix=self.prefix) if\
-                _.name.endswith('-listdir.json')]
+            keys = [_ for _ in bucket.get_all_keys(prefix='%s/' %
+                (self.prefix,)) if _.name.endswith('-listdir.json')]
             if keys:
                 keys.sort(key=lambda l: parser.parse(l.last_modified))
                 key = keys.pop()
@@ -154,30 +153,32 @@ class DownloadHandler(object):
             (self.target,))
         try:
 
-            if os.path.isdir(self.target) == False :
+            if os.path.isdir(self.target) == False:
                 log.debug('Creating temp file in %s' % (self.target,))
                 os.makedirs(self.target)
             log.debug('Changing owner:group for %s to %s:%s' %
                 (self.target, self.owner, self.group,))
-                
+
             os.chown(self.target, self.owner, self.group)
         except Exception as e:
+            log.debug(e)
             log.exception('%s exists' % (self.target,))
         log.info('Will write to %s' % (self.target,))
 
     def _worker(self, idx, queue):
         log.info('Thread #%d processing items' % (idx, ))
         bucket = self._get_bucket()
-        
+
         while queue.empty() == False:
             queueddownload = queue.get()
             fname = queueddownload.filename
             keypath = '%s/%s' % (self.prefix, fname,)
             destfile = os.path.join(self.target, os.path.basename(fname))
-            
-            log.debug('Checking if we need to download %s to %s' % (keypath, destfile,))
-            
-            if queueddownload.attemptcount < 5 :
+
+            log.debug('Checking if we need to download %s to %s' %
+                (keypath, destfile,))
+
+            if queueddownload.attemptcount < 5:
                 download = False
                 #Retry downloading until we succeed
                 try:
@@ -188,30 +189,32 @@ class DownloadHandler(object):
                         if self.force:
                             download = True
                         elif stat.st_size != key.size:
-                            log.info('%s and %s size differs, will re-download' %
-                                (key.name, destfile,))
+                            log.info('%s and %s size differs, will '
+                                're-download' % (key.name, destfile,))
                             download = True
                     else:
                         download = True
-                    
+
                     if download:
-                        log.info('Downloading %s from %s to %s' % (key.name, bucket.name, destfile))
+                        log.info('Downloading %s from %s to %s' %
+                            (key.name, bucket.name, destfile))
                         key.get_contents_to_filename(destfile)
-                    
-                    
+
                 except Exception as e:
-                    log.exception('Failed to download `%s` retrying' % (fname,))
-                    #We can't download, try again 
+                    log.debug(e)
+                    log.exception('Failed to download `%s` retrying' %
+                        (fname,))
+                    #We can't download, try again
                     queueddownload.increment()
                     queue.put(queueddownload)
-                    
+
             else:
-                log.info('Tried to download %s too many times.  Giving up' % fname)
+                log.info('Tried to download %s too many times.  Giving up' %
+                    fname)
 
             #Pop the task regardless of state.  If it fails we've put it back
             queue.task_done()
-                
-            
+
         log.info('Thread #%d finished processing' % (idx,))
 
     def run(self):
@@ -222,7 +225,7 @@ class DownloadHandler(object):
         for filename in self.fileset:
             log.info('Pushing file %s onto queue' % filename)
             self.queue.put(DownloadCounter(filename))
-        
+
 #       launch threads and attach an event to them
         for idx in range(0, self.num_threads):
             self.threads[idx] = {}
@@ -230,7 +233,7 @@ class DownloadHandler(object):
             t = threading.Thread(target=self._worker,
                 kwargs={'idx': idx, 'queue': self.queue})
             t.setDaemon(True)
-            self.threads[idx]= t
+            self.threads[idx] = t
             t.start()
 
         #Wait for everything to finish downloading
