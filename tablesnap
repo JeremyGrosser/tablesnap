@@ -335,15 +335,7 @@ def backup_file(handler, filename, filedir):
     if filename.find('-tmp') != -1:
         return
 
-def backup_files(handler, paths, log=default_log):
-    for path in paths:
-        log.info('Backing up %s' % path)
-        for filename in os.listdir(path):
-            if filename.find('-tmp') != -1:
-                continue
-    handler.add_file(fullpath)
-
-def backup_files(handler, paths, recurse):
+def backup_files(handler, paths, recurse, log=default_log):
     for path in paths:
         log.info('Backing up %s' % path)
         if recurse:
