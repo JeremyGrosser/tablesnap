@@ -52,12 +52,14 @@ class UploadHandler(pyinotify.ProcessEvent):
                 prefix=None, name=None, max_size=None, chunk_size=None,
                 exclude=None,
                 with_index=True,
+                keyname_separator=None,
                 log=default_log):
         self.key = key
         self.secret = secret
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
+        self.keyname_separator = keyname_separator
         self.retries = default_retries
         self.log = log
         self.exclude = exclude
@@ -80,7 +82,8 @@ class UploadHandler(pyinotify.ProcessEvent):
             t.start()
 
     def build_keyname(self, pathname):
-        return '%s%s:%s' % (self.prefix or '', self.name, pathname)
+        return '%s%s%s%s' % (self.prefix, self.name, self.keyname_separator,
+                             pathname)
 
     def add_file(self, filename):
         if not is_excluded(filename, self.exclude):
@@ -375,12 +378,14 @@ def main():
         help='Automatically start watching new subdirectories within path(s)')
     parser.add_option('-B', '--backup', action='store_true', dest='backup', default=False,
         help='Backup existing files to S3 if they\'re not already there')
-    parser.add_option('-p', '--prefix', dest='prefix', default=None,
+    parser.add_option('-p', '--prefix', dest='prefix', default='',
         help='Set a string prefix for uploaded files in S3')
     parser.add_option('--without-index', dest='without_index',
         action='store_true', default=False,
         help='Do not store a JSON representation of the current directory '
              'listing in S3 when uploading a file to S3.')
+    parser.add_option('--keyname-separator', dest='keyname_separator',
+        default=':', help='Separator for the keyname between name and path.')
     parser.add_option('-t', '--threads', dest='threads', default=default_threads,
                       help='Number of writer threads')
     parser.add_option('-n', '--name', dest='name', default=None,
@@ -416,6 +421,7 @@ def main():
                             prefix=options.prefix, name=options.name,
                             exclude=options.exclude,
                             with_index=(not options.without_index),
+                            keyname_separator=options.keyname_separator,
                             max_size=int(options.max_upload_size),
                             chunk_size=int(options.multipart_chunk_size))
 
