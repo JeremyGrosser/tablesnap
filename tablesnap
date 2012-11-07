@@ -331,23 +331,6 @@ class UploadHandler(pyinotify.ProcessEvent):
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
-def backup_file(handler, filename, filedir):
-    if filename.find('-tmp') != -1:
-        return
-
-def backup_files(handler, paths, recurse, log=default_log):
-    for path in paths:
-        log.info('Backing up %s' % path)
-        if recurse:
-            for root, dirs, files in os.walk(path):
-                for filename in files:
-                    backup_file(handler, filename, root)
-        else:
-            for filename in os.listdir(path):
-                backup_file(handler, filename, path)
-    return 0
-
-
 def main():
     parser = OptionParser(usage='%prog [options] <bucket> <path> [...]')
     parser.add_option('-k', '--aws-key', dest='aws_key', default=None)
@@ -401,7 +384,7 @@ def main():
                                 (path))
             return 1
 
-    backup_files(handler, paths, options.recursive)
+        default_log.info('Backing up %s' % path)
 
     notifier.loop()
 
