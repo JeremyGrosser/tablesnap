@@ -331,9 +331,17 @@ class UploadHandler(pyinotify.ProcessEvent):
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
+
 def backup_file(handler, filename, filedir):
     if filename.find('-tmp') != -1:
         return
+
+    fullpath = '%s/%s' % (filedir, filename)
+    if os.path.isdir(fullpath):
+        return
+
+    handler.add_file(fullpath)
+
 
 def backup_files(handler, paths, recurse, log=default_log):
     for path in paths:
@@ -356,6 +364,8 @@ def main():
         help='Recursively watch the given path(s)s for new SSTables')
     parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False,
         help='Automatically start watching new subdirectories within path(s)')
+    parser.add_option('-B', '--backup', action='store_true', dest='backup', default=False,
+        help='Backup existing files to S3 if they\'re not already there')
     parser.add_option('-p', '--prefix', dest='prefix', default=None,
         help='Set a string prefix for uploaded files in S3')
     parser.add_option('-t', '--threads', dest='threads', default=default_threads,
@@ -401,7 +411,8 @@ def main():
                                 (path))
             return 1
 
-    backup_files(handler, paths, options.recursive)
+    if options.backup:
+        backup_files(handler, paths, options.recursive)
 
     notifier.loop()
 
