@@ -331,9 +331,17 @@ class UploadHandler(pyinotify.ProcessEvent):
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
+
 def backup_file(handler, filename, filedir):
     if filename.find('-tmp') != -1:
         return
+
+    fullpath = '%s/%s' % (filedir, filename)
+    if os.path.isdir(fullpath):
+        return
+
+    handler.add_file(fullpath)
+
 
 def backup_files(handler, paths, recurse, log=default_log):
     for path in paths:
