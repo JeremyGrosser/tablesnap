@@ -64,6 +64,9 @@ the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
                             Number of writer threads
       -n NAME, --name=NAME  Use this name instead of the FQDN to identify the
                             SSTables from this host
+      -e EXCLUDE, --exclude=EXCLUDE
+                            Exclude files matching this regular expression from
+                            upload (default: -tmp)
       --max-upload-size=MAX_UPLOAD_SIZE
                             Max size for files to be uploaded before doing
                             multipart (default 5120M)
