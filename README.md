@@ -62,6 +62,8 @@ the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
                             Set a string prefix for uploaded files in S3
       --without-index       Do not store a JSON representation of the current
                             directory listing in S3 when uploading a file to S3.
+      --keyname-separator=KEYNAME_SEPARATOR
+                            Separator for the keyname between name and path.
       -t THREADS, --threads=THREADS
                             Number of writer threads
       -n NAME, --name=NAME  Use this name instead of the FQDN to identify the
