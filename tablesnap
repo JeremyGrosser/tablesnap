@@ -345,7 +345,11 @@ class UploadHandler(pyinotify.ProcessEvent):
 
 
 def backup_file(handler, filename, filedir, exclude):
-    fullpath = '%s/%s' % (filedir, filename)
+    if not filedir.endswith('/'):
+        filedir += '/'
+
+    fullpath = os.path.abspath('%s%s' % (filedir, filename))
+
     if os.path.isdir(fullpath):
         return
 
