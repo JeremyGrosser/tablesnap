@@ -50,7 +50,9 @@ def is_excluded(path, rule):
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
                 prefix=None, name=None, max_size=None, chunk_size=None,
-                log=default_log, exclude=None):
+                exclude=None,
+                with_index=True,
+                log=default_log):
         self.key = key
         self.secret = secret
         self.bucket_name = bucket_name
@@ -59,6 +61,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.retries = default_retries
         self.log = log
         self.exclude = exclude
+        self.with_index = with_index
 
         if max_size:
             self.max_size = max_size * 2**20
@@ -221,7 +224,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         if f and not f.closed:
             f.close()
 
-    def upload_sstable(self, bucket, keyname, filename, with_index=True):
+    def upload_sstable(self, bucket, keyname, filename):
 
         # Include the file system metadata so that we have the
         # option of using it to restore the file modes correctly.
@@ -246,7 +249,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         try:
             dirname = os.path.dirname(filename)
-            if with_index:
+            if self.with_index:
                 json_str = json.dumps({dirname: os.listdir(dirname)})
                 for r in range(self.retries):
                     try:
@@ -374,6 +377,10 @@ def main():
         help='Backup existing files to S3 if they\'re not already there')
     parser.add_option('-p', '--prefix', dest='prefix', default=None,
         help='Set a string prefix for uploaded files in S3')
+    parser.add_option('--without-index', dest='without_index',
+        action='store_true', default=False,
+        help='Do not store a JSON representation of the current directory '
+             'listing in S3 when uploading a file to S3.')
     parser.add_option('-t', '--threads', dest='threads', default=default_threads,
                       help='Number of writer threads')
     parser.add_option('-n', '--name', dest='name', default=None,
@@ -408,6 +415,7 @@ def main():
                             secret=options.aws_secret, bucket_name=bucket,
                             prefix=options.prefix, name=options.name,
                             exclude=options.exclude,
+                            with_index=(not options.without_index),
                             max_size=int(options.max_upload_size),
                             chunk_size=int(options.multipart_chunk_size))
 
