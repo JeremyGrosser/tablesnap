@@ -1,3 +1,22 @@
+tablesnap (0.6.1-1) precise; urgency=low
+
+  [ Jorge Gallegos ]
+  * Fixes Issue #10
+
+  [ Aaron Morton ]
+  * remove duplicate backup_files() funcs
+
+  [ Christoph Tavan ]
+  * Fix initial backup on startup that got broken with 96cd44bf4077e70186c8ef83662facbe4ef11a34
+  * Add --backup-switch that is also described in the README
+  * Update usage instructions in README
+  * Add --exclude option to allow changing the hardcoded '-tmp' filter.
+  * Add --without-index option to skip creation of -listdir.json files.
+  * Make keyname separator configurable and default to ':'
+  * Enforce uploading with full path in initial uploads.
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 07 Nov 2012 21:52:37 +0000
+
 tablesnap (0.6.0-1) precise; urgency=low
 
   * Multipart uploads to S3
