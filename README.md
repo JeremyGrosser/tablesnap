@@ -48,14 +48,28 @@ the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
 `/etc/default/tablesnap`.
 
     Usage: tablesnap [options] <bucket> <path> [...]
+
     Options:
       -h, --help            show this help message and exit
       -k AWS_KEY, --aws-key=AWS_KEY
       -s AWS_SECRET, --aws-secret=AWS_SECRET
       -r, --recursive       Recursively watch the given path(s)s for new SSTables
-      -a, --auto-add        Automatically start watching new subdirectories within path(s)
-      -B, --backup          Backup existing SSTables to S3 if they're not already there
-
+      -a, --auto-add        Automatically start watching new subdirectories within
+                            path(s)
+      -B, --backup          Backup existing files to S3 if they're not already
+                            there
+      -p PREFIX, --prefix=PREFIX
+                            Set a string prefix for uploaded files in S3
+      -t THREADS, --threads=THREADS
+                            Number of writer threads
+      -n NAME, --name=NAME  Use this name instead of the FQDN to identify the
+                            SSTables from this host
+      --max-upload-size=MAX_UPLOAD_SIZE
+                            Max size for files to be uploaded before doing
+                            multipart (default 5120M)
+      --multipart-chunk-size=MULTIPART_CHUNK_SIZE
+                            Chunk size for multipart uploads (default: 256M or 10%
+                            of free memory if default is not available)
 
 For example:
 
