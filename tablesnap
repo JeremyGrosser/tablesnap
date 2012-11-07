@@ -364,6 +364,8 @@ def main():
         help='Recursively watch the given path(s)s for new SSTables')
     parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False,
         help='Automatically start watching new subdirectories within path(s)')
+    parser.add_option('-B', '--backup', action='store_true', dest='backup', default=False,
+        help='Backup existing files to S3 if they\'re not already there')
     parser.add_option('-p', '--prefix', dest='prefix', default=None,
         help='Set a string prefix for uploaded files in S3')
     parser.add_option('-t', '--threads', dest='threads', default=default_threads,
@@ -409,7 +411,8 @@ def main():
                                 (path))
             return 1
 
-    backup_files(handler, paths, options.recursive)
+    if options.backup:
+        backup_files(handler, paths, options.recursive)
 
     notifier.loop()
 
