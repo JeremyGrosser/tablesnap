@@ -51,6 +51,7 @@ the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
 usage: tablesnap [-h] -k AWS_KEY -s AWS_SECRET [-r] [-a] [-B] [-p PREFIX]
                  [--without-index] [--keyname-separator KEYNAME_SEPARATOR]
                  [-t THREADS] [-n NAME] [-e EXCLUDE]
+                 [--listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}]
                  [--max-upload-size MAX_UPLOAD_SIZE]
                  [--multipart-chunk-size MULTIPART_CHUNK_SIZE]
                  bucket paths [paths ...]
@@ -86,6 +87,9 @@ optional arguments:
   -e EXCLUDE, --exclude EXCLUDE
                         Exclude files matching this regular expression from
                         upload (default: -tmp)
+  --listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}
+                        Which events to listen on, can be specified multiple
+                        times. Values: IN_MOVED_TO (default), IN_CLOSE_WRITE
   --max-upload-size MAX_UPLOAD_SIZE
                         Max size for files to be uploaded before doing
                         multipart (default 5120M)
