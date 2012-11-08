@@ -2,7 +2,7 @@
 import pyinotify
 import boto
 
-from optparse import OptionParser
+import argparse
 from traceback import format_exc
 from threading import Thread
 from Queue import Queue
@@ -41,6 +41,9 @@ max_file_size = 5120
 
 # Default chunk size for multipart uploads in MB
 default_chunk_size = 256
+
+# Default inotify event to listen on
+default_listen_event = 'IN_MOVED_TO'
 
 # Check if path should be excluded from backup
 def is_excluded(path, rule):
@@ -109,6 +112,9 @@ class UploadHandler(pyinotify.ProcessEvent):
                 os.kill(os.getpid(), signal.SIGKILL)
 
             self.fileq.task_done()
+
+    def process_IN_CLOSE_WRITE(self, event):
+        self.add_file(event.pathname)
 
     def process_IN_MOVED_TO(self, event):
         self.add_file(event.pathname)
@@ -343,6 +349,16 @@ class UploadHandler(pyinotify.ProcessEvent):
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
+def get_mask(listen_events):
+    if not listen_events:
+        listen_events = [default_listen_event]
+
+    mask = 0
+    while listen_events:
+        mask = mask | getattr(pyinotify, listen_events.pop())
+
+    return mask
+
 
 def backup_file(handler, filename, filedir, exclude):
     if not filedir.endswith('/'):
@@ -373,74 +389,78 @@ def backup_files(handler, paths, recurse, exclude, log=default_log):
 
 
 def main():
-    parser = OptionParser(usage='%prog [options] <bucket> <path> [...]')
-    parser.add_option('-k', '--aws-key', dest='aws_key', default=None)
-    parser.add_option('-s', '--aws-secret', dest='aws_secret', default=None)
-    parser.add_option('-r', '--recursive', action='store_true', dest='recursive', default=False,
+    parser = argparse.ArgumentParser(description='Tablesnap is a script that '
+        'uses inotify to monitor a directory for events and reacts to them by '
+        'spawning a new thread to upload that file to Amazon S3, along with '
+        'a JSON-formatted list of what other files were in the directory at '
+        'the time of the copy.')
+    parser.add_argument('bucket', help='S3 bucket')
+    parser.add_argument('paths', nargs='+', help='Paths to be watched')
+    parser.add_argument('-k', '--aws-key', required=True)
+    parser.add_argument('-s', '--aws-secret', required=True)
+    parser.add_argument('-r', '--recursive', action='store_true',
+        default=False,
         help='Recursively watch the given path(s)s for new SSTables')
-    parser.add_option('-a', '--auto-add', action='store_true', dest='auto_add', default=False,
+    parser.add_argument('-a', '--auto-add', action='store_true', default=False,
         help='Automatically start watching new subdirectories within path(s)')
-    parser.add_option('-B', '--backup', action='store_true', dest='backup', default=False,
-        help='Backup existing files to S3 if they\'re not already there')
-    parser.add_option('-p', '--prefix', dest='prefix', default='',
+    parser.add_argument('-B', '--backup', action='store_true', default=False,
+        help='Backup existing files to S3 if they are not already there')
+    parser.add_argument('-p', '--prefix', default='',
         help='Set a string prefix for uploaded files in S3')
-    parser.add_option('--without-index', dest='without_index',
-        action='store_true', default=False,
+    parser.add_argument('--without-index', action='store_true', default=False,
         help='Do not store a JSON representation of the current directory '
              'listing in S3 when uploading a file to S3.')
-    parser.add_option('--keyname-separator', dest='keyname_separator',
-        default=':', help='Separator for the keyname between name and path.')
-    parser.add_option('-t', '--threads', dest='threads', default=default_threads,
-                      help='Number of writer threads')
-    parser.add_option('-n', '--name', dest='name', default=None,
-        help='Use this name instead of the FQDN to identify the SSTables from this host')
-    parser.add_option('-e', '--exclude', dest='exclude', default='-tmp',
+    parser.add_argument('--keyname-separator', default=':',
+        help='Separator for the keyname between name and path.')
+    parser.add_argument('-t', '--threads', default=default_threads,
+        help='Number of writer threads')
+    parser.add_argument('-n', '--name',
+        help='Use this name instead of the FQDN to identify the files from '
+             'this host')
+    parser.add_argument('-e', '--exclude', default='-tmp',
         help='Exclude files matching this regular expression from upload '
              '(default: -tmp)')
-    parser.add_option('--max-upload-size', dest='max_upload_size',
-        default=max_file_size,
+    parser.add_argument('--listen-events', action='append',
+        choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
+        help='Which events to listen on, can be specified multiple times. '
+             'Values: IN_MOVED_TO (default), IN_CLOSE_WRITE')
+    parser.add_argument('--max-upload-size', default=max_file_size,
         help='Max size for files to be uploaded before doing multipart '
-        '(default %dM)' % max_file_size)
-    parser.add_option('--multipart-chunk-size', dest='multipart_chunk_size',
-        default=default_chunk_size,
-        help='Chunk size for multipart uploads (default: %dM or 10%% of '
-        'free memory if default is not available)' %
-        (default_chunk_size,))
-    options, args = parser.parse_args()
+             '(default %dM)' % max_file_size)
+    parser.add_argument('--multipart-chunk-size', default=default_chunk_size,
+        help='Chunk size for multipart uploads (default: %dM or 10%%%% of '
+             'free memory if default is not available)' % default_chunk_size)
 
-    if len(args) < 2:
-        parser.print_help()
-        return -1
-
-    bucket = args[0]
-    paths = args[1:]
+    args = parser.parse_args()
 
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
-    s3 = boto.connect_s3(options.aws_key, options.aws_secret)
-    bucket = s3.get_bucket(bucket)
+    s3 = boto.connect_s3(args.aws_key, args.aws_secret)
+    bucket = s3.get_bucket(args.bucket)
 
-    handler = UploadHandler(threads=options.threads, key=options.aws_key,
-                            secret=options.aws_secret, bucket_name=bucket,
-                            prefix=options.prefix, name=options.name,
-                            exclude=options.exclude,
-                            with_index=(not options.without_index),
-                            keyname_separator=options.keyname_separator,
-                            max_size=int(options.max_upload_size),
-                            chunk_size=int(options.multipart_chunk_size))
+    handler = UploadHandler(threads=args.threads, key=args.aws_key,
+                            secret=args.aws_secret, bucket_name=bucket,
+                            prefix=args.prefix, name=args.name,
+                            exclude=args.exclude,
+                            with_index=(not args.without_index),
+                            keyname_separator=args.keyname_separator,
+                            max_size=int(args.max_upload_size),
+                            chunk_size=int(args.multipart_chunk_size))
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
-    for path in paths:
-        ret = wm.add_watch(path, pyinotify.IN_MOVED_TO, rec=options.recursive,
-                           auto_add=options.auto_add)
+
+    mask = get_mask(args.listen_events)
+    for path in args.paths:
+        ret = wm.add_watch(path, mask, rec=args.recursive,
+                           auto_add=args.auto_add)
         if ret[path] == -1:
             default_log.critical('add_watch failed for %s, bailing out!' %
                                 (path))
             return 1
 
-    if options.backup:
-        backup_files(handler, paths, options.recursive, options.exclude)
+    if args.backup:
+        backup_files(handler, args.paths, args.recursive, args.exclude)
 
     notifier.loop()
 
