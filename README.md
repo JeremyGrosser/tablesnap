@@ -47,36 +47,52 @@ All configuration for tablesnap happens on the command line. If you are using
 the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
 `/etc/default/tablesnap`.
 
-    Usage: tablesnap [options] <bucket> <path> [...]
+```
+usage: tablesnap [-h] -k AWS_KEY -s AWS_SECRET [-r] [-a] [-B] [-p PREFIX]
+                 [--without-index] [--keyname-separator KEYNAME_SEPARATOR]
+                 [-t THREADS] [-n NAME] [-e EXCLUDE]
+                 [--max-upload-size MAX_UPLOAD_SIZE]
+                 [--multipart-chunk-size MULTIPART_CHUNK_SIZE]
+                 bucket paths [paths ...]
 
-    Options:
-      -h, --help            show this help message and exit
-      -k AWS_KEY, --aws-key=AWS_KEY
-      -s AWS_SECRET, --aws-secret=AWS_SECRET
-      -r, --recursive       Recursively watch the given path(s)s for new SSTables
-      -a, --auto-add        Automatically start watching new subdirectories within
-                            path(s)
-      -B, --backup          Backup existing files to S3 if they're not already
-                            there
-      -p PREFIX, --prefix=PREFIX
-                            Set a string prefix for uploaded files in S3
-      --without-index       Do not store a JSON representation of the current
-                            directory listing in S3 when uploading a file to S3.
-      --keyname-separator=KEYNAME_SEPARATOR
-                            Separator for the keyname between name and path.
-      -t THREADS, --threads=THREADS
-                            Number of writer threads
-      -n NAME, --name=NAME  Use this name instead of the FQDN to identify the
-                            SSTables from this host
-      -e EXCLUDE, --exclude=EXCLUDE
-                            Exclude files matching this regular expression from
-                            upload (default: -tmp)
-      --max-upload-size=MAX_UPLOAD_SIZE
-                            Max size for files to be uploaded before doing
-                            multipart (default 5120M)
-      --multipart-chunk-size=MULTIPART_CHUNK_SIZE
-                            Chunk size for multipart uploads (default: 256M or 10%
-                            of free memory if default is not available)
+Tablesnap is a script that uses inotify to monitor a directory for events and
+reacts to them by spawning a new thread to upload that file to Amazon S3,
+along with a JSON-formatted list of what other files were in the directory at
+the time of the copy.
+
+positional arguments:
+  bucket                S3 bucket
+  paths                 Paths to be watched
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -k AWS_KEY, --aws-key AWS_KEY
+  -s AWS_SECRET, --aws-secret AWS_SECRET
+  -r, --recursive       Recursively watch the given path(s)s for new SSTables
+  -a, --auto-add        Automatically start watching new subdirectories within
+                        path(s)
+  -B, --backup          Backup existing files to S3 if they are not already
+                        there
+  -p PREFIX, --prefix PREFIX
+                        Set a string prefix for uploaded files in S3
+  --without-index       Do not store a JSON representation of the current
+                        directory listing in S3 when uploading a file to S3.
+  --keyname-separator KEYNAME_SEPARATOR
+                        Separator for the keyname between name and path.
+  -t THREADS, --threads THREADS
+                        Number of writer threads
+  -n NAME, --name NAME  Use this name instead of the FQDN to identify the
+                        files from this host
+  -e EXCLUDE, --exclude EXCLUDE
+                        Exclude files matching this regular expression from
+                        upload (default: -tmp)
+  --max-upload-size MAX_UPLOAD_SIZE
+                        Max size for files to be uploaded before doing
+                        multipart (default 5120M)
+  --multipart-chunk-size MULTIPART_CHUNK_SIZE
+                        Chunk size for multipart uploads (default: 256M or 10%
+                        of free memory if default is not available)
+```
 
 For example:
 
