@@ -110,6 +110,9 @@ class UploadHandler(pyinotify.ProcessEvent):
 
             self.fileq.task_done()
 
+    def process_IN_CLOSE_WRITE(self, event):
+        self.add_file(event.pathname)
+
     def process_IN_MOVED_TO(self, event):
         self.add_file(event.pathname)
 
@@ -429,8 +432,9 @@ def main():
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
+    mask = pyinotify.IN_MOVED_TO | pyinotify.IN_CLOSE_WRITE
     for path in args.paths:
-        ret = wm.add_watch(path, pyinotify.IN_MOVED_TO, rec=options.recursive,
+        ret = wm.add_watch(path, mask, rec=options.recursive,
                            auto_add=options.auto_add)
         if ret[path] == -1:
             default_log.critical('add_watch failed for %s, bailing out!' %
