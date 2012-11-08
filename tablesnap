@@ -42,6 +42,9 @@ max_file_size = 5120
 # Default chunk size for multipart uploads in MB
 default_chunk_size = 256
 
+# Default inotify event to listen on
+default_listen_event = 'IN_MOVED_TO'
+
 # Check if path should be excluded from backup
 def is_excluded(path, rule):
     return rule and re.search(rule, path)
@@ -346,6 +349,16 @@ class UploadHandler(pyinotify.ProcessEvent):
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
 
+def get_mask(listen_events):
+    if not listen_events:
+        listen_events = [default_listen_event]
+
+    mask = 0
+    while listen_events:
+        mask = mask | getattr(pyinotify, listen_events.pop())
+
+    return mask
+
 
 def backup_file(handler, filename, filedir, exclude):
     if not filedir.endswith('/'):
@@ -407,6 +420,10 @@ def main():
     parser.add_argument('-e', '--exclude', default='-tmp',
         help='Exclude files matching this regular expression from upload '
              '(default: -tmp)')
+    parser.add_argument('--listen-events', action='append',
+        choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
+        help='Which events to listen on, can be specified multiple times. '
+             'Values: IN_MOVED_TO (default), IN_CLOSE_WRITE')
     parser.add_argument('--max-upload-size', default=max_file_size,
         help='Max size for files to be uploaded before doing multipart '
              '(default %dM)' % max_file_size)
@@ -432,10 +449,11 @@ def main():
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
-    mask = pyinotify.IN_MOVED_TO | pyinotify.IN_CLOSE_WRITE
+
+    mask = get_mask(args.listen_events)
     for path in args.paths:
-        ret = wm.add_watch(path, mask, rec=options.recursive,
-                           auto_add=options.auto_add)
+        ret = wm.add_watch(path, mask, rec=args.recursive,
+                           auto_add=args.auto_add)
         if ret[path] == -1:
             default_log.critical('add_watch failed for %s, bailing out!' %
                                 (path))
