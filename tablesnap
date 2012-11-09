@@ -45,15 +45,11 @@ default_chunk_size = 256
 # Default inotify event to listen on
 default_listen_event = 'IN_MOVED_TO'
 
-# Check if path should be excluded from backup
-def is_excluded(path, rule):
-    return rule and re.search(rule, path)
-
 
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
                 prefix=None, name=None, max_size=None, chunk_size=None,
-                exclude=None,
+                include=None,
                 with_index=True,
                 keyname_separator=None,
                 log=default_log):
@@ -65,7 +61,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.keyname_separator = keyname_separator
         self.retries = default_retries
         self.log = log
-        self.exclude = exclude
+        self.include = include
         self.with_index = with_index
 
         if max_size:
@@ -89,8 +85,11 @@ class UploadHandler(pyinotify.ProcessEvent):
                              pathname)
 
     def add_file(self, filename):
-        if not is_excluded(filename, self.exclude):
+        if self.include is None or (self.include is not None
+                                    and self.include(filename)):
             self.fileq.put(filename)
+        else:
+            self.log.info('Skipping %s due to exclusion rule' % filename)
 
     def get_bucket(self):
         # Reconnect to S3
@@ -360,7 +359,7 @@ def get_mask(listen_events):
     return mask
 
 
-def backup_file(handler, filename, filedir, exclude):
+def backup_file(handler, filename, filedir, include, log):
     if not filedir.endswith('/'):
         filedir += '/'
 
@@ -369,22 +368,23 @@ def backup_file(handler, filename, filedir, exclude):
     if os.path.isdir(fullpath):
         return
 
-    if is_excluded(fullpath, exclude):
+    if not include(fullpath):
+        log.info('Skipping %s due to exclusion rule' % fullpath)
         return
 
     handler.add_file(fullpath)
 
 
-def backup_files(handler, paths, recurse, exclude, log=default_log):
+def backup_files(handler, paths, recurse, include, log=default_log):
     for path in paths:
         log.info('Backing up %s' % path)
         if recurse:
             for root, dirs, files in os.walk(path):
                 for filename in files:
-                    backup_file(handler, filename, root, exclude)
+                    backup_file(handler, filename, root, include, log)
         else:
             for filename in os.listdir(path):
-                backup_file(handler, filename, path, exclude)
+                backup_file(handler, filename, path, include, log)
     return 0
 
 
@@ -417,13 +417,21 @@ def main():
     parser.add_argument('-n', '--name',
         help='Use this name instead of the FQDN to identify the files from '
              'this host')
-    parser.add_argument('-e', '--exclude', default='-tmp',
-        help='Exclude files matching this regular expression from upload '
-             '(default: -tmp)')
     parser.add_argument('--listen-events', action='append',
         choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
         help='Which events to listen on, can be specified multiple times. '
              'Values: IN_MOVED_TO (default), IN_CLOSE_WRITE')
+
+    include_group = parser.add_mutually_exclusive_group()
+    include_group.add_argument('-e', '--exclude', default=None,
+        help='Exclude files matching this regular expression from upload.'
+             'WARNING: If neither exclude nor include are defined, then all '
+             'files matching "-tmp" are excluded.')
+    include_group.add_argument('-i', '--include', default=None,
+        help='Include only files matching this regular expression into upload.'
+             'WARNING: If neither exclude nor include are defined, then all '
+             'files matching "-tmp" are excluded.')
+
     parser.add_argument('--max-upload-size', default=max_file_size,
         help='Max size for files to be uploaded before doing multipart '
              '(default %dM)' % max_file_size)
@@ -433,6 +441,14 @@ def main():
 
     args = parser.parse_args()
 
+    # For backwards-compatibility: If neither exclude nor include are set,
+    # then include only files not matching '-tmp'. This was the default
+    include = lambda path: path.find('-tmp') == -1
+    if args.exclude:
+        include = lambda path: not re.search(args.exclude, path)
+    if args.include:
+        include = lambda path: not not re.search(args.include, path)
+
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
     s3 = boto.connect_s3(args.aws_key, args.aws_secret)
@@ -441,7 +457,7 @@ def main():
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
                             secret=args.aws_secret, bucket_name=bucket,
                             prefix=args.prefix, name=args.name,
-                            exclude=args.exclude,
+                            include=include,
                             with_index=(not args.without_index),
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
@@ -460,7 +476,7 @@ def main():
             return 1
 
     if args.backup:
-        backup_files(handler, args.paths, args.recursive, args.exclude)
+        backup_files(handler, args.paths, args.recursive, include)
 
     notifier.loop()
 
