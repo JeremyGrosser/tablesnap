@@ -7,6 +7,7 @@ from traceback import format_exc
 from threading import Thread
 from Queue import Queue
 import logging
+import logging.handlers
 import os.path
 import socket
 import json
@@ -19,13 +20,22 @@ import signal
 import StringIO
 
 default_log = logging.getLogger('tablesnap')
-stderr = logging.StreamHandler()
-stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
-default_log.addHandler(stderr)
+if os.environ.get('TABLESNAP_SYSLOG', False):
+    facility = logging.handlers.SysLogHandler.LOG_DAEMON
+    syslog = logging.handlers.SysLogHandler(address='/dev/log', facility=facility)
+    syslog.setFormatter(logging.Formatter('tablesnap: %(message)s'))
+    default_log.addHandler(syslog)
+else:
+    stderr = logging.StreamHandler()
+    stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+    default_log.addHandler(stderr)
+
 if os.environ.get('TDEBUG', False):
     default_log.setLevel(logging.DEBUG)
 else:
     default_log.setLevel(logging.INFO)
+
+default_log.info('Starting up')
 
 # Default number of writer threads
 default_threads = 4
