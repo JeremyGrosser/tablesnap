@@ -34,6 +34,21 @@ There are pre-build binaries for Ubuntu Maverick amd64 and i386 in this PPA:
 	> EOF
 	# aptitude update
 
+The daemonized version of the Debian/Ubuntu package uses syslog for logging.
+The messages are sent to the `DAEMON` logging facility and tagged with
+`tablesnap`. If you want to redirect the log output to a log file other than
+`/var/log/daemon.log` you can filter by this tag. E.g. if you are using
+syslog-ng you could add
+
+```
+# tablesnap
+filter f_tablesnap { filter(f_daemon) and match("tablesnap" value("PROGRAM")); };
+destination d_tablesnap { file("/var/log/tablesnap.log"); };
+log { source(s_src); filter(f_tablesnap); destination(d_tablesnap); flags(final); };
+```
+
+to `/etc/syslog-ng/syslog-ng.conf`.
+
 If you are not a Debian/Ubuntu user or do not wish to install the tablesnap
 package, you may copy the tablesnap script anywhere you'd like and run it from
 there. Tablesnap depends on the pyinotify and boto Python packages. These are
