@@ -50,7 +50,7 @@ the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
 ```
 usage: tablesnap [-h] -k AWS_KEY -s AWS_SECRET [-r] [-a] [-B] [-p PREFIX]
                  [--without-index] [--keyname-separator KEYNAME_SEPARATOR]
-                 [-t THREADS] [-n NAME] [-e EXCLUDE]
+                 [-t THREADS] [-n NAME] [-e EXCLUDE | -i INCLUDE]
                  [--listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}]
                  [--max-upload-size MAX_UPLOAD_SIZE]
                  [--multipart-chunk-size MULTIPART_CHUNK_SIZE]
@@ -86,7 +86,13 @@ optional arguments:
                         files from this host
   -e EXCLUDE, --exclude EXCLUDE
                         Exclude files matching this regular expression from
-                        upload (default: -tmp)
+                        upload.WARNING: If neither exclude nor include are
+                        defined, then all files matching "-tmp" are excluded.
+  -i INCLUDE, --include INCLUDE
+                        Include only files matching this regular expression
+                        into upload.WARNING: If neither exclude nor include
+                        are defined, then all files matching "-tmp" are
+                        excluded.
   --listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}
                         Which events to listen on, can be specified multiple
                         times. Values: IN_MOVED_TO (default), IN_CLOSE_WRITE
