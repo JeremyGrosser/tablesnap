@@ -1,3 +1,20 @@
+tablesnap (0.6.2-1) precise; urgency=low
+
+  [ Christoph Tavan ]
+  * Migrate from optparse to argparse.
+  * Update README
+  * Also listen for IN_CLOSE_WRITE events, not only IN_MOVED_TO.
+  * Make listen events configurable
+  * Update README
+  * Add --include parameter.
+  * Update readme
+  * Update debian init to work with start-stop-daemon instead of daemon
+  * Use python syslog logging when started as a daemon.
+  * Install default config to /etc/default/tablesnap
+  * Comment on how to handle the log output with syslog-ng
+
+ -- Christoph Tavan <dev@tavan.de>  Tue, 13 Nov 2012 19:04:42 +0000
+
 tablesnap (0.6.1-1) precise; urgency=low
 
   [ Jorge Gallegos ]
