@@ -9,5 +9,6 @@ setup(
     install_requires=[
         'pyinotify',
         'boto>=2.2',
+        'argparse',
     ]
 )
