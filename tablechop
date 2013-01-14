@@ -1,0 +1,136 @@
+#!/usr/bin/env python
+
+""" Cleans SSTables on S3 """
+
+import argparse
+from datetime import datetime
+import json
+import logging
+import os
+import sys
+
+import boto
+from dateutil import parser as dtparser
+
+
+def days_ago(tstamp):
+    now = datetime.now()
+    # Datetime format from the last_modified property on keys from boto
+    backup = datetime.strptime(tstamp, '%Y-%m-%dT%H:%M:%S.%fZ')
+    delta = now - backup
+    return delta.days
+
+def clean_backups(args, log):
+
+    if args.debug:
+        log.setLevel(logging.DEBUG)
+
+    try:
+        s3conn = boto.connect_s3(args.key, args.secret)
+        bucket = s3conn.get_bucket(args.bucket)
+    except boto.exception.BotoServerError, e:
+        log.error('Problem initializing S3 connection: %s', e)
+        sys.exit(1)
+
+    try:
+        key_list = bucket.list(args.path)
+    except boto.exception.BotoServerError, e:
+        log.error('Problem getting keys from S3 bucket: %s', e)
+        sys.exit(1)
+
+    log.info("Connected to S3, getting keys ...")
+
+    key_list = sorted(key_list, key=lambda k: dtparser.parse(k.last_modified))
+    key_list.reverse() # most recent first
+
+    log.debug("%s keys total", len(key_list))
+
+    json_files = [x for x in key_list if x.name.endswith('-listdir.json')]
+    to_delete = set([x.name for x in key_list]) # we'll remove from this list
+
+    log.debug("%s json listdir files", len(json_files))
+
+    for jfile in json_files:
+        log.debug("file dated : %s (%s)", jfile.last_modified,
+                                            jfile.name.split('/')[-1])
+        if days_ago(jfile.last_modified) > args.age:
+            # We've gone back past our cutoff
+            log.info("reached cutoff at timestamp %s", jfile.last_modified)
+            break
+        ky = bucket.get_key(jfile)
+        jdict = json.loads(ky.get_contents_as_string())
+        if len(jdict.values()) != 1:
+            raise SystemError('-listdir.json file should have '
+                'a single key/value pair!')
+        # formatting here to match the full 'key' version of filename
+        keepers = set(["%s/%s" % (args.path, x) for x in jdict.values()[0]])
+        keepers.add(jfile.name) # keep this json file itself
+        to_delete = to_delete.difference(keepers)
+
+    if args.debug:
+        log.info("%s non-keeper files to delete", len(to_delete))
+        ddates = list(set([x.last_modified[:10] for x in key_list \
+                           if x.name in to_delete]))
+        ddates.sort()
+        log.debug("deletion dates : %s", ddates)
+        log.debug("Test mode, nothing deleted")
+        return
+
+    try:
+        bucket.delete_keys(to_delete) # !!
+    except Exception as e:
+        log.error('S3 delete ERR, will try again later [%s]', e)
+
+    log.info("Keys deleted")
+
+
+def main(log):
+    parser = argparse.ArgumentParser(
+        description='Clean SSTables from S3. Scroll backwards through '
+        '-listdir.json files in chronological order collecting a "keeper" '
+        'list until it reaches it\'s age cutoff. Deletes all files not in that '
+        'list')
+    parser.add_argument(
+        '-d',
+        '--debug',
+        dest='debug',
+        action='store_true',
+        help='Run in debug mode, will not delete files. Implies -v')
+    parser.add_argument(
+        '-k',
+        '--key',
+        required=True,
+        dest='key',
+        help='Amazon S3 Key')
+    parser.add_argument(
+        '-s',
+        '--secret',
+        required=True,
+        dest='secret',
+        help='Amazon S3 Secret')
+    parser.add_argument(
+        'bucket',
+        help='S3 Bucket')
+    parser.add_argument(
+        'path',
+        help='Path within bucket to the tablesnap archived files')
+    parser.add_argument(
+        'age',
+        type=int,
+        help='How many days worth of backups to keep')
+    args = parser.parse_args()
+    clean_backups(args, log)
+
+if __name__ == '__main__':
+
+    log = logging.getLogger('tablechop')
+    stderr = logging.StreamHandler()
+    stderr.setFormatter(logging.Formatter(
+        '%(name)s [%(asctime)s] %(levelname)s %(message)s'))
+    log.addHandler(stderr)
+    if os.environ.get('TDEBUG', False):
+        log.setLevel(logging.DEBUG)
+    else:
+        log.setLevel(logging.INFO)
+
+    main(log)
