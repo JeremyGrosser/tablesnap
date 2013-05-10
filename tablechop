@@ -20,33 +20,40 @@ def days_ago(tstamp):
     delta = now - backup
     return delta.days
 
+
 def clean_backups(args, log):
 
+    host = args.s3host
+    is_secure = args.usehttp
     if args.debug:
         log.setLevel(logging.DEBUG)
 
+    if not args.name:
+        args.name = socket.getfqdn()
+
     try:
-        s3conn = boto.connect_s3(args.key, args.secret)
+        s3conn = boto.connect_s3(args.key, args.secret, host=host, is_secure=is_secure)
         bucket = s3conn.get_bucket(args.bucket)
     except boto.exception.BotoServerError, e:
         log.error('Problem initializing S3 connection: %s', e)
         sys.exit(1)
 
     try:
-        key_list = bucket.list(args.path)
+        key_list = bucket.list("%s:%s" % (args.name, args.path))
     except boto.exception.BotoServerError, e:
         log.error('Problem getting keys from S3 bucket: %s', e)
         sys.exit(1)
 
+    print key_list
     log.info("Connected to S3, getting keys ...")
 
     key_list = sorted(key_list, key=lambda k: dtparser.parse(k.last_modified))
-    key_list.reverse() # most recent first
+    key_list.reverse()  # most recent first
 
     log.info("%s keys total", len(key_list))
 
     json_keys = [x for x in key_list if x.name.endswith('-listdir.json')]
-    to_delete = set([x.name for x in key_list]) # we'll remove from this list
+    to_delete = set([x.name for x in key_list])  # we'll remove from this list
 
     log.debug("%s json listdir keys", len(json_keys))
 
@@ -62,9 +69,11 @@ def clean_backups(args, log):
         if len(jdict.values()) != 1:
             raise SystemError('-listdir.json file should have '
                 'a single key/value pair!')
-        # formatting here to match the full 'key' version of filename
-        keepers = set(["%s/%s" % (args.path, x) for x in jdict.values()[0]])
-        keepers.add(jkey.name) # keep this json file itself
+        dirname = jdict.keys()[0]
+        # fullpaths here since some files are in subdirectories
+        fullpaths = [os.path.join(dirname, x) for x in jdict.values()[0]]
+        keepers = set(["%s:%s" % (args.name, x) for x in fullpaths])
+        keepers.add(jkey.name)  # keep this json file itself
         to_delete = to_delete.difference(keepers)
 
     if args.debug:
@@ -79,11 +88,12 @@ def clean_backups(args, log):
     log.info("Deleting %s keys" % len(to_delete))
 
     try:
-        bucket.delete_keys(to_delete) # !!
+        bucket.delete_keys(to_delete)  # !!
     except Exception as e:
         log.error('S3 delete ERR, will try again later [%s]', e)
 
     log.info("Keys deleted")
+
 
 def main(log):
     parser = argparse.ArgumentParser(
@@ -109,12 +119,23 @@ def main(log):
         required=True,
         dest='secret',
         help='Amazon S3 Secret')
+    parser.add_argument('--s3host', default='s3.amazonaws.com',
+        help='Use this s3 host, eg. when using a local ceph instance')
+    parser.add_argument('--usehttp', action='store_false', default=True,
+        help='Do we connect over HTTPS?')
+    parser.add_argument(
+        '-n',
+        '--name',
+        dest='name',
+        required=False,
+        help='Use this name instead of the FQDN to identify the files from '
+             'this host')
     parser.add_argument(
         'bucket',
         help='S3 Bucket')
     parser.add_argument(
         'path',
-        help='Path within bucket to the tablesnap archived files')
+        help='Path portion of key in S3')
     parser.add_argument(
         'age',
         type=int,
