@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+import socket
 
 import boto
 from dateutil import parser as dtparser
@@ -44,7 +45,6 @@ def clean_backups(args, log):
         log.error('Problem getting keys from S3 bucket: %s', e)
         sys.exit(1)
 
-    print key_list
     log.info("Connected to S3, getting keys ...")
 
     key_list = sorted(key_list, key=lambda k: dtparser.parse(k.last_modified))
@@ -77,6 +77,8 @@ def clean_backups(args, log):
         to_delete = to_delete.difference(keepers)
 
     if args.debug:
+        for keep in keepers:
+            log.debug("keeping : %s", keep)
         log.debug("%s non-keeper keys to delete", len(to_delete))
         ddates = list(set([x.last_modified[:10] for x in key_list \
                            if x.name in to_delete]))
