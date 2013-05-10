@@ -78,6 +78,8 @@ class DownloadHandler(object):
         self.bucket_name = args.bucket[0]
         self.num_threads = args.threads
         self.force = args.force
+        self.host = args.s3host
+        self.is_secure = args.usehttp
         if args.name:
             self.name = args.name
         self.prefix = '%s:%s' % (self.name, self.origin)
@@ -100,7 +102,7 @@ class DownloadHandler(object):
     def _get_bucket(self):
 #       unsure if boto is thread-safe, will reconnect every time
         log.debug('Connecting to s3')
-        conn = boto.connect_s3(self.key, self.secret)
+        conn = boto.connect_s3(self.key, self.secret, host=self.host, is_secure=self.is_secure)
         bucket = conn.get_bucket(self.bucket_name)
         log.debug('Connected to s3')
         return bucket
@@ -274,6 +276,11 @@ def main():
         help='Use this name instead of the FQDN to prefix the bucket dir')
     ap.add_argument('bucket', nargs=1,
         help='S3 bucket to download files from')
+    # http://ceph.com/docs/master/radosgw/s3/python/
+    ap.add_argument('--s3host', default='s3.amazonaws.com',
+        help='Use this s3 host, eg. when using a local ceph instance')
+    ap.add_argument('--usehttp', action='store_false', default=True,
+        help='Do we connect over HTTPS?')
     ap.add_argument('origin', nargs=1,
         help='Path inside the bucket to the directory you want to download '
         'files from')

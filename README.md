@@ -65,8 +65,9 @@ the Debian package, you'll set these options in the `DAEMON_OPTS` variable in
 ```
 usage: tablesnap [-h] -k AWS_KEY -s AWS_SECRET [-r] [-a] [-B] [-p PREFIX]
                  [--without-index] [--keyname-separator KEYNAME_SEPARATOR]
-                 [-t THREADS] [-n NAME] [-e EXCLUDE | -i INCLUDE]
+                 [-t THREADS] [-n NAME]
                  [--listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}]
+                 [--s3host S3HOST] [--usehttp] [-e EXCLUDE | -i INCLUDE]
                  [--max-upload-size MAX_UPLOAD_SIZE]
                  [--multipart-chunk-size MULTIPART_CHUNK_SIZE]
                  bucket paths [paths ...]
@@ -99,6 +100,11 @@ optional arguments:
                         Number of writer threads
   -n NAME, --name NAME  Use this name instead of the FQDN to identify the
                         files from this host
+  --listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}
+                        Which events to listen on, can be specified multiple
+                        times. Values: IN_MOVED_TO (default), IN_CLOSE_WRITE
+  --s3host S3HOST       Use this s3 host, eg. when using a local ceph instance
+  --usehttp             Do we connect over HTTPS?
   -e EXCLUDE, --exclude EXCLUDE
                         Exclude files matching this regular expression from
                         upload.WARNING: If neither exclude nor include are
@@ -108,9 +114,6 @@ optional arguments:
                         into upload.WARNING: If neither exclude nor include
                         are defined, then all files matching "-tmp" are
                         excluded.
-  --listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}
-                        Which events to listen on, can be specified multiple
-                        times. Values: IN_MOVED_TO (default), IN_CLOSE_WRITE
   --max-upload-size MAX_UPLOAD_SIZE
                         Max size for files to be uploaded before doing
                         multipart (default 5120M)

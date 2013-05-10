@@ -62,7 +62,9 @@ class UploadHandler(pyinotify.ProcessEvent):
                 include=None,
                 with_index=True,
                 keyname_separator=None,
-                log=default_log):
+                log=default_log,
+                host=None,
+                is_secure=True):
         self.key = key
         self.secret = secret
         self.bucket_name = bucket_name
@@ -73,6 +75,8 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.log = log
         self.include = include
         self.with_index = with_index
+        self.host = host
+        self.is_secure = is_secure
 
         if max_size:
             self.max_size = max_size * 2**20
@@ -103,7 +107,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
     def get_bucket(self):
         # Reconnect to S3
-        s3 = boto.connect_s3(self.key, self.secret)
+        s3 = boto.connect_s3(self.key, self.secret, host=self.host, is_secure=self.is_secure)
         return s3.get_bucket(self.bucket_name)
 
     def worker(self):
@@ -194,7 +198,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                     self.log.debug('Setting missing md5sum metadata for %s' %
                                   (keyname,))
                     key.set_metadata('md5sum', md5[0])
-        
+
         if result:
             self.log.info("Keyname %s already exists, skipping upload"
                           % (keyname))
@@ -203,7 +207,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 'MD5 hashes differ, you should take a look. As immutable '
                 'files never change, one must assume the local file got '
                 'corrupted and the right version is the one in S3. Will '
-                'skip this file to avoid future complications' % 
+                'skip this file to avoid future complications' %
                 (filename, keyname, ))
             return True
 
@@ -431,7 +435,11 @@ def main():
         choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
         help='Which events to listen on, can be specified multiple times. '
              'Values: IN_MOVED_TO (default), IN_CLOSE_WRITE')
-
+    # http://ceph.com/docs/master/radosgw/s3/python/
+    parser.add_argument('--s3host', default='s3.amazonaws.com',
+        help='Use this s3 host, eg. when using a local ceph instance')
+    parser.add_argument('--usehttp', action='store_false', default=True,
+        help='Do we connect over HTTPS?')
     include_group = parser.add_mutually_exclusive_group()
     include_group.add_argument('-e', '--exclude', default=None,
         help='Exclude files matching this regular expression from upload.'
@@ -461,7 +469,7 @@ def main():
 
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
-    s3 = boto.connect_s3(args.aws_key, args.aws_secret)
+    s3 = boto.connect_s3(args.aws_key, args.aws_secret, host=args.s3host, is_secure=args.usehttp)
     bucket = s3.get_bucket(args.bucket)
 
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
@@ -471,7 +479,8 @@ def main():
                             with_index=(not args.without_index),
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
-                            chunk_size=int(args.multipart_chunk_size))
+                            chunk_size=int(args.multipart_chunk_size),
+                            host=args.s3host, is_secure=args.usehttp)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
