@@ -13,9 +13,12 @@ import sys
 from datetime import datetime
 from dateutil import parser as dtparser
 
+now = None
 
 def days_ago(tstamp):
-    now = datetime.now()
+    global now
+    if now is None:
+        now = datetime.now()
     # Datetime format from the last_modified property on keys from boto
     backup = datetime.strptime(tstamp, '%Y-%m-%dT%H:%M:%S.%fZ')
     delta = now - backup
@@ -44,14 +47,18 @@ def clean_backups(args, log):
 
     log.info("Connected to S3, getting keys ...")
 
-    key_list = sorted(key_list, key=lambda k: dtparser.parse(k.last_modified))
-    key_list.reverse() # most recent first
+    json_keys = []
+    to_delete = set() # we'll remove from this list
+    for k in sorted(
+        key_list,
+        key=lambda k: dtparser.parse(k.last_modified),
+        reverse=True, # most recent first
+    ):
+        to_delete.add(k.name)
+        if k.name.endswith('-listdir.json'):
+            json_keys.append(k)
 
-    log.info("%s keys total", len(key_list))
-
-    json_keys = [x for x in key_list if x.name.endswith('-listdir.json')]
-    to_delete = set([x.name for x in key_list]) # we'll remove from this list
-
+    log.info("%s keys total", len(to_delete))
     log.debug("%s json listdir keys", len(json_keys))
 
     for jkey in json_keys:
@@ -69,9 +76,12 @@ def clean_backups(args, log):
         dirname = jdict.keys()[0]
         # fullpaths here since some files are in subdirectories
         fullpaths = [os.path.join(dirname, x) for x in jdict.values()[0]]
-        keepers = set(["%s:%s" % (args.name, x) for x in fullpaths])
-        keepers.add(jkey.name) # keep this json file itself
-        to_delete = to_delete.difference(keepers)
+        for x in fullpaths:
+            key_to_keep = '%s:%s' % (args.name, x)
+            if key_to_keep in to_delete:
+                to_delete.remove(key_to_keep)
+        if jkey.name in to_delete:
+            to_delete.remove(jkey.name)
 
     if args.debug:
         log.debug("%s non-keeper keys to delete", len(to_delete))
@@ -82,7 +92,7 @@ def clean_backups(args, log):
         log.debug("Test mode, nothing deleted")
         return
 
-    log.info("Deleting %s keys" % len(to_delete))
+    log.info("Deleting %s keys", len(to_delete))
 
     try:
         bucket.delete_keys(to_delete) # !!
