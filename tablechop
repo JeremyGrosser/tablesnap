@@ -3,13 +3,14 @@
 """ Cleans SSTables on S3 """
 
 import argparse
-from datetime import datetime
+import boto
 import json
 import logging
 import os
+import socket
 import sys
 
-import boto
+from datetime import datetime
 from dateutil import parser as dtparser
 
 
@@ -25,6 +26,9 @@ def clean_backups(args, log):
     if args.debug:
         log.setLevel(logging.DEBUG)
 
+    if not args.name:
+        args.name = socket.getfqdn()
+
     try:
         s3conn = boto.connect_s3(args.key, args.secret)
         bucket = s3conn.get_bucket(args.bucket)
@@ -33,7 +37,7 @@ def clean_backups(args, log):
         sys.exit(1)
 
     try:
-        key_list = bucket.list(args.path)
+        key_list = bucket.list("%s:%s" % (args.name, args.path))
     except boto.exception.BotoServerError, e:
         log.error('Problem getting keys from S3 bucket: %s', e)
         sys.exit(1)
@@ -62,8 +66,10 @@ def clean_backups(args, log):
         if len(jdict.values()) != 1:
             raise SystemError('-listdir.json file should have '
                 'a single key/value pair!')
-        # formatting here to match the full 'key' version of filename
-        keepers = set(["%s/%s" % (args.path, x) for x in jdict.values()[0]])
+        dirname = jdict.keys()[0]
+        # fullpaths here since some files are in subdirectories
+        fullpaths = [os.path.join(dirname, x) for x in jdict.values()[0]]
+        keepers = set(["%s:%s" % (args.name, x) for x in fullpaths])
         keepers.add(jkey.name) # keep this json file itself
         to_delete = to_delete.difference(keepers)
 
@@ -110,11 +116,18 @@ def main(log):
         dest='secret',
         help='Amazon S3 Secret')
     parser.add_argument(
+        '-n',
+        '--name',
+        dest='name',
+        required=False,
+        help='Use this name instead of the FQDN to identify the files from '
+             'this host')
+    parser.add_argument(
         'bucket',
         help='S3 Bucket')
     parser.add_argument(
         'path',
-        help='Path within bucket to the tablesnap archived files')
+        help='Path portion of key in S3')
     parser.add_argument(
         'age',
         type=int,
