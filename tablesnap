@@ -62,7 +62,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                 include=None,
                 with_index=True,
                 keyname_separator=None,
-                log=default_log):
+                log=default_log,
+                md5_on_start=False):
         self.key = key
         self.secret = secret
         self.bucket_name = bucket_name
@@ -73,6 +74,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.log = log
         self.include = include
         self.with_index = with_index
+        self.md5_on_start = md5_on_start
 
         if max_size:
             self.max_size = max_size * 2**20
@@ -132,7 +134,7 @@ class UploadHandler(pyinotify.ProcessEvent):
     # Check if this keyname (ie, file) has already been uploaded to
     # the S3 bucket. This will verify that not only does the keyname
     # exist, but that the MD5 sum is the same -- this protects against
-    # partial or corrupt uploads.
+    # partial or corrupt uploads. IF you enable md5 at start
     #
     def key_exists(self, bucket, keyname, filename, stat):
         key = None
@@ -163,51 +165,54 @@ class UploadHandler(pyinotify.ProcessEvent):
                 'to avoid future complications' % (filename, keyname, ))
             return True
         else:
-            # Compute MD5 sum of file
-            try:
-                fp = open(filename, "r")
-            except IOError as (errno, strerror):
-                if errno == 2:
-                    # The file was removed, return True to skip this file.
-                    return True
-
-                self.log.critical("Failed to open file: %s (%s)\n%s" %
-                             (filename, strerror, format_exc(),))
-                raise
-
-            md5 = key.compute_md5(fp)
-            fp.close()
-            self.log.debug('Computed md5: %s' % (md5,))
-
-            meta = key.get_metadata('md5sum')
-
-            if meta:
-                self.log.debug('MD5 metadata comparison: %s == %s? : %s' %
-                              (md5[0], meta, (md5[0] == meta)))
-                result = (md5[0] == meta)
+            if not self.md5_on_start:
+                # Don't bother computing MD5 at startup
+                return True
             else:
-                self.log.debug('ETag comparison: %s == %s? : %s' %
-                              (md5[0], key.etag.strip('"'),
-                              (md5[0] == key.etag.strip('"'))))
-                result = (md5[0] == key.etag.strip('"'))
-                if result:
-                    self.log.debug('Setting missing md5sum metadata for %s' %
-                                  (keyname,))
-                    key.set_metadata('md5sum', md5[0])
-        
-        if result:
-            self.log.info("Keyname %s already exists, skipping upload"
-                          % (keyname))
-        else:
-            self.log.warning('ATTENTION: your source (%s) and target (%s) '
-                'MD5 hashes differ, you should take a look. As immutable '
-                'files never change, one must assume the local file got '
-                'corrupted and the right version is the one in S3. Will '
-                'skip this file to avoid future complications' % 
-                (filename, keyname, ))
-            return True
+                # Compute MD5 sum of file
+                try:
+                    fp = open(filename, "r")
+                except IOError as (errno, strerror):
+                    if errno == 2:
+                        # The file was removed, return True to skip this file.
+                        return True
 
-        return result
+                    self.log.critical("Failed to open file: %s (%s)\n%s" %
+                                 (filename, strerror, format_exc(),))
+                    raise
+
+                md5 = key.compute_md5(fp)
+                fp.close()
+                self.log.debug('Computed md5: %s' % (md5,))
+
+                meta = key.get_metadata('md5sum')
+
+                if meta:
+                    self.log.debug('MD5 metadata comparison: %s == %s? : %s' %
+                                  (md5[0], meta, (md5[0] == meta)))
+                    result = (md5[0] == meta)
+                else:
+                    self.log.debug('ETag comparison: %s == %s? : %s' %
+                                  (md5[0], key.etag.strip('"'),
+                                  (md5[0] == key.etag.strip('"'))))
+                    result = (md5[0] == key.etag.strip('"'))
+                    if result:
+                        self.log.debug('Setting missing md5sum metadata for %s' %
+                                      (keyname,))
+                        key.set_metadata('md5sum', md5[0])
+        
+                if result:
+                    self.log.info("Keyname %s already exists, skipping upload"
+                                  % (keyname))
+                else:
+                    self.log.warning('ATTENTION: your source (%s) and target (%s) '
+                        'MD5 hashes differ, you should take a look. As immutable '
+                        'files never change, one must assume the local file got '
+                        'corrupted and the right version is the one in S3. Will '
+                        'skip this file to avoid future complications' % 
+                        (filename, keyname, ))
+
+                return result
 
     def get_free_memory_in_kb(self):
         f = open('/proc/meminfo', 'r')
@@ -427,6 +432,9 @@ def main():
     parser.add_argument('-n', '--name',
         help='Use this name instead of the FQDN to identify the files from '
              'this host')
+    parser.add_argument('--md5-on-start', default=False, action='store_true',
+        help='If you want to compute *every file* for its MD5 checksum at '
+             'start time, enable this option.')
     parser.add_argument('--listen-events', action='append',
         choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
         help='Which events to listen on, can be specified multiple times. '
@@ -471,7 +479,8 @@ def main():
                             with_index=(not args.without_index),
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
-                            chunk_size=int(args.multipart_chunk_size))
+                            chunk_size=int(args.multipart_chunk_size),
+                            md5_on_start=args.md5_on_start)
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)

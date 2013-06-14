@@ -2,3 +2,5 @@
 *.swp
 *.pyc
 env
+build
+dist
