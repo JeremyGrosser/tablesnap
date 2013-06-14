@@ -1,0 +1,4 @@
+pyinotify
+boto>=2.2
+argparse
+python-dateutil
