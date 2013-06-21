@@ -66,7 +66,7 @@ def clean_backups(args, log):
                   jkey.name.split('/')[-1])
         if days_ago(jkey.last_modified) > args.age:
             # We've gone back past our cutoff
-            log.info("reached cutoff at timestamp %s", jkey.last_modified)
+            log.info("Reached cutoff at timestamp %s", jkey.last_modified)
             break
         ky = bucket.get_key(jkey)
         jdict = json.loads(ky.get_contents_as_string())
@@ -83,8 +83,16 @@ def clean_backups(args, log):
         if jkey.name in to_delete:
             to_delete.remove(jkey.name)
 
+    to_del_len = len(to_delete)
+    if args.list_deletes:
+        # chunk into lines with 10 files each to avoid either too many lines
+        # or one gigantic line
+        to_del_list = list(to_delete)
+        for delchunk in [','.join(to_del_list[i:i+10]) for \
+                         i in xrange(0, to_del_len, 10)]:
+            log.info("Files to delete: %s" % delchunk)
     if args.debug:
-        log.debug("%s non-keeper keys to delete", len(to_delete))
+        log.debug("%s non-keeper keys to delete", to_del_len)
         ddates = list(set([x.last_modified[:10] for x in key_list \
                            if x.name in to_delete]))
         ddates.sort()
@@ -92,7 +100,7 @@ def clean_backups(args, log):
         log.debug("Test mode, nothing deleted")
         return
 
-    log.info("Deleting %s keys", len(to_delete))
+    log.info("Deleting %s keys", to_del_len)
 
     try:
         bucket.delete_keys(to_delete) # !!
@@ -113,6 +121,12 @@ def main(log):
         dest='debug',
         action='store_true',
         help='Run in debug mode, will not delete keys. Implies -v')
+    parser.add_argument(
+        '-l',
+        '--list-deletes',
+        dest='list_deletes',
+        action='store_true',
+        help='Log every file being deleted')
     parser.add_argument(
         '-k',
         '--key',
