@@ -273,7 +273,12 @@ class UploadHandler(pyinotify.ProcessEvent):
         try:
             dirname = os.path.dirname(filename)
             if self.with_index:
-                json_str = json.dumps({dirname: os.listdir(dirname)})
+                listdir = []
+                for listfile in os.listdir(dirname):
+                    if self.include is None or (self.include is not None
+                                                and self.include(listfile)):
+                        listdir.append(listfile)
+                json_str = json.dumps({dirname: listdir})
                 for r in range(self.retries):
                     try:
                         key = bucket.new_key('%s-listdir.json' % keyname)
