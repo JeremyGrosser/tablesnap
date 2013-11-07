@@ -115,7 +115,7 @@ class DownloadHandler(object):
                 (self.prefix, target_file))
 #       Otherwise try to fetch the most recent one
         else:
-            keys = [_ for _ in bucket.get_all_keys(prefix='%s/' %
+            keys = [_ for _ in bucket.list(prefix='%s/' %
                 (self.prefix,)) if _.name.endswith('-listdir.json')]
             if keys:
                 keys.sort(key=lambda l: parser.parse(l.last_modified))
