@@ -58,8 +58,8 @@ default_listen_event = 'IN_MOVED_TO'
 
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
-                prefix=None, name=None, max_size=None, chunk_size=None,
-                include=None,
+                prefix=None, name=None, paths=None, max_size=None,
+                chunk_size=None, include=None,
                 with_index=True,
                 global_index=False,
                 keyname_separator=None,
@@ -70,6 +70,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
+        self.paths = paths
         self.keyname_separator = keyname_separator
         self.retries = default_retries
         self.log = log
@@ -99,8 +100,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                              pathname)
 
     def add_file(self, filename):
-        if self.include is None or (self.include is not None
-                                    and self.include(filename)):
+        if self.include is None or self.include(filename):
+            self.log.debug("Adding %s to the file upload queue" % filename)
             self.fileq.put(filename)
         else:
             self.log.info('Skipping %s due to exclusion rule' % filename)
@@ -116,6 +117,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         while True:
             f = self.fileq.get()
             keyname = self.build_keyname(f)
+            self.log.debug("Uploading %s" % f)
             try:
                 self.upload_sstable(bucket, keyname, f)
             except:
@@ -304,7 +306,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 for path in self.paths:
                     for root, dirs, files in os.walk(path):
                         for file in files:
-                            filename = os.path.join(root, files)
+                            filename = os.path.join(root, file)
                             if self.include is None or self.include(filename):
                                 file_list.append(filename)
                 index_name = '%s-global-index.txt' % keyname
@@ -491,11 +493,13 @@ def main():
     if args.exclude:
         include = lambda path: not re.search(args.exclude, path)
     if args.include:
-        include = lambda path: not not re.search(args.include, path)
+        include = lambda path: re.search(args.include, path)
 
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
+    default_log.debug('Connecting to s3')
     s3 = boto.connect_s3(args.aws_key, args.aws_secret)
+    default_log.debug('Getting bucket')
     bucket = s3.get_bucket(args.bucket)
 
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
@@ -515,6 +519,7 @@ def main():
 
     mask = get_mask(args.listen_events)
     for path in args.paths:
+        default_log.debug('Adding watch for path %s' % path)
         ret = wm.add_watch(path, mask, rec=args.recursive,
                            auto_add=args.auto_add)
         if ret[path] == -1:
@@ -523,8 +528,10 @@ def main():
             return 1
 
     if args.backup:
+        default_log.debug('Backing up existing files')
         backup_files(handler, args.paths, args.recursive, include)
 
+    default_log.debug('Starting notifier loop')
     notifier.loop()
 
 if __name__ == '__main__':
