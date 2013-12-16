@@ -450,7 +450,7 @@ def main():
     parser.add_argument('--global-index', action='store_true', default=False,
         help='Store an index of all files that are in all paths'
              'when uploading a file to S3. '
-             'Useful for multi-datadir cassandra.')
+             'Useful for multi-datadir (JBOD) cassandra.')
     parser.add_argument('--keyname-separator', default=':',
         help='Separator for the keyname between name and path.')
     parser.add_argument('-t', '--threads', default=default_threads,
