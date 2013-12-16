@@ -292,8 +292,7 @@ class UploadHandler(pyinotify.ProcessEvent):
             if self.with_index:
                 listdir = []
                 for listfile in os.listdir(dirname):
-                    if self.include is None or (self.include is not None
-                                                and self.include(listfile)):
+                    if self.include is None or self.include(listfile):
                         listdir.append(listfile)
                 json_str = json.dumps({dirname: listdir})
                 json_name = '%s-listdir.json' % keyname
@@ -301,16 +300,16 @@ class UploadHandler(pyinotify.ProcessEvent):
                                               content_type='application/json')
 
             if self.global_index:
-                file_list = ""
+                file_list = []
                 for path in self.paths:
                     for root, dirs, files in os.walk(path):
                         for file in files:
                             filename = os.path.join(root, files)
-                            if self.include is None or (self.include is not None
-                                                        and self.include(filename)):
-                                file_list += '%s\n' % filename
+                            if self.include is None or self.include(filename):
+                                file_list.append(filename)
                 index_name = '%s-global-index.txt' % keyname
-                self.upload_file_with_content(bucket, index_name, file_list)
+                self.upload_file_with_content(bucket, index_name,
+                                              ('\n').join(file_list))
 
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
