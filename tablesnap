@@ -18,7 +18,6 @@ import grp
 import re
 import signal
 import StringIO
-import time
 
 default_log = logging.getLogger('tablesnap')
 if os.environ.get('TABLESNAP_SYSLOG', False):
@@ -250,6 +249,21 @@ class UploadHandler(pyinotify.ProcessEvent):
         if f and not f.closed:
             f.close()
 
+    def upload_file_with_content(self, bucket, keyname, content, content_type='text/plain'):
+        for r in range(self.retries):
+            try:
+                key = bucket.new_key(keyname)
+                key.set_contents_from_string(content,
+                    headers={'Content-Type': content_type},
+                    replace=True)
+                break
+            except:
+                if r == self.retries - 1:
+                    self.log.critical("Failed to upload %s-listdir.json" % keyname)
+                    raise
+                bucket = self.get_bucket()
+                continue
+
     def upload_sstable(self, bucket, keyname, filename):
 
         # Include the file system metadata so that we have the
@@ -282,20 +296,9 @@ class UploadHandler(pyinotify.ProcessEvent):
                                                 and self.include(listfile)):
                         listdir.append(listfile)
                 json_str = json.dumps({dirname: listdir})
-                for r in range(self.retries):
-                    try:
-                        key = bucket.new_key('%s-listdir.json' % keyname)
-                        key.set_contents_from_string(json_str,
-                            headers={'Content-Type': 'application/json'},
-                            replace=True)
-                        break
-                    except:
-                        if r == self.retries - 1:
-                            self.log.critical("Failed to upload directory "
-                                              "listing.")
-                            raise
-                        bucket = self.get_bucket()
-                        continue
+                json_name = '%s-listdir.json' % keyname
+                self.upload_file_with_content(bucket, json_name, json_str,
+                                              content_type='application/json')
 
             if self.global_index:
                 file_list = ""
@@ -304,20 +307,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                         for file in files:
                             file_list += os.path.join(root, files)
                             file_list += '\0'
-                for r in range(self.retries):
-                    try:
-                        key = bucket.new_key('%s-global-index' % keyname)
-                        key.set_contents_from_string(file_list,
-                            headers={'Content-Type': 'application/octet-stream'},
-                            replace=True)
-                        break
-                    except:
-                        if r == self.retries - 1:
-                            self.log.critical("Failed to upload global directory "
-                                              "listing.")
-                            raise
-                        bucket = self.get_bucket()
-                        continue
+                index_name = '%s-global-index' % keyname
+                self.upload_file_with_content(bucket, index_name, file_list)
 
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
