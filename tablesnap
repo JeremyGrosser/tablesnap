@@ -18,6 +18,7 @@ import grp
 import re
 import signal
 import StringIO
+import time
 
 default_log = logging.getLogger('tablesnap')
 if os.environ.get('TABLESNAP_SYSLOG', False):
@@ -61,6 +62,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 prefix=None, name=None, max_size=None, chunk_size=None,
                 include=None,
                 with_index=True,
+                global_index=False,
                 keyname_separator=None,
                 log=default_log,
                 md5_on_start=False):
@@ -74,6 +76,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.log = log
         self.include = include
         self.with_index = with_index
+        self.global_index = global_index
         self.md5_on_start = md5_on_start
 
         if max_size:
@@ -294,6 +297,28 @@ class UploadHandler(pyinotify.ProcessEvent):
                         bucket = self.get_bucket()
                         continue
 
+            if self.global_index:
+                file_list = ""
+                for path in self.paths:
+                    for root, dirs, files in os.walk(path):
+                        for file in files:
+                            file_list += os.path.join(root, files)
+                            file_list += '\0'
+                for r in range(self.retries):
+                    try:
+                        key = bucket.new_key('%s-global-index' % keyname)
+                        key.set_contents_from_string(file_list,
+                            headers={'Content-Type': 'application/octet-stream'},
+                            replace=True)
+                        break
+                    except:
+                        if r == self.retries - 1:
+                            self.log.critical("Failed to upload global directory "
+                                              "listing.")
+                            raise
+                        bucket = self.get_bucket()
+                        continue
+
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
                     'mode': stat.st_mode}
@@ -430,6 +455,9 @@ def main():
     parser.add_argument('--without-index', action='store_true', default=False,
         help='Do not store a JSON representation of the current directory '
              'listing in S3 when uploading a file to S3.')
+    parser.add_argument('--global-index', action='store_true', default=False,
+        help='Store an index of all files that are in all target directories'
+             'when uploading a file to S3.')
     parser.add_argument('--keyname-separator', default=':',
         help='Separator for the keyname between name and path.')
     parser.add_argument('-t', '--threads', default=default_threads,
@@ -480,8 +508,10 @@ def main():
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
                             secret=args.aws_secret, bucket_name=bucket,
                             prefix=args.prefix, name=args.name,
+                            paths=args.paths,
                             include=include,
                             with_index=(not args.without_index),
+                            global_index=(args.global_index),
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
                             chunk_size=int(args.multipart_chunk_size),
