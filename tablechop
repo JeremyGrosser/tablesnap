@@ -67,8 +67,8 @@ def clean_backups(args, log):
         log.debug("key dated : %s (%s)", ikey.last_modified,
                   ikey.name.split('/')[-1])
         if i == 0 and args.preserve:
-            log.info("Keeping latest (%s) due to use of --preserve", ikey.last_modified)
             # save the first due to preservation being on
+            log.info("Keeping latest (%s) due to use of --preserve", ikey.last_modified)
         elif days_ago(ikey.last_modified) > args.age:
             # We've gone back past our cutoff
             log.info("reached cutoff at timestamp %s", ikey.last_modified)
