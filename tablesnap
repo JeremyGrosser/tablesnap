@@ -58,9 +58,10 @@ default_listen_event = 'IN_MOVED_TO'
 
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
-                prefix=None, name=None, max_size=None, chunk_size=None,
-                include=None,
+                prefix=None, name=None, paths=None, max_size=None,
+                chunk_size=None, include=None,
                 with_index=True,
+                global_index=False,
                 keyname_separator=None,
                 log=default_log,
                 md5_on_start=False):
@@ -69,11 +70,13 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
+        self.paths = paths
         self.keyname_separator = keyname_separator
         self.retries = default_retries
         self.log = log
         self.include = include
         self.with_index = with_index
+        self.global_index = global_index
         self.md5_on_start = md5_on_start
 
         if max_size:
@@ -97,8 +100,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                              pathname)
 
     def add_file(self, filename):
-        if self.include is None or (self.include is not None
-                                    and self.include(filename)):
+        if self.include is None or self.include(filename):
+            self.log.debug("Adding %s to the file upload queue" % filename)
             self.fileq.put(filename)
         else:
             self.log.info('Skipping %s due to exclusion rule' % filename)
@@ -114,6 +117,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         while True:
             f = self.fileq.get()
             keyname = self.build_keyname(f)
+            self.log.debug("Uploading %s" % f)
             try:
                 self.upload_sstable(bucket, keyname, f)
             except:
@@ -247,6 +251,21 @@ class UploadHandler(pyinotify.ProcessEvent):
         if f and not f.closed:
             f.close()
 
+    def upload_file_with_content(self, bucket, keyname, content, content_type='text/plain'):
+        for r in range(self.retries):
+            try:
+                key = bucket.new_key(keyname)
+                key.set_contents_from_string(content,
+                    headers={'Content-Type': content_type},
+                    replace=True)
+                break
+            except:
+                if r == self.retries - 1:
+                    self.log.critical("Failed to upload %s-listdir.json" % keyname)
+                    raise
+                bucket = self.get_bucket()
+                continue
+
     def upload_sstable(self, bucket, keyname, filename):
 
         # Include the file system metadata so that we have the
@@ -273,21 +292,26 @@ class UploadHandler(pyinotify.ProcessEvent):
         try:
             dirname = os.path.dirname(filename)
             if self.with_index:
-                json_str = json.dumps({dirname: os.listdir(dirname)})
-                for r in range(self.retries):
-                    try:
-                        key = bucket.new_key('%s-listdir.json' % keyname)
-                        key.set_contents_from_string(json_str,
-                            headers={'Content-Type': 'application/json'},
-                            replace=True)
-                        break
-                    except:
-                        if r == self.retries - 1:
-                            self.log.critical("Failed to upload directory "
-                                              "listing.")
-                            raise
-                        bucket = self.get_bucket()
-                        continue
+                listdir = []
+                for listfile in os.listdir(dirname):
+                    if self.include is None or self.include(listfile):
+                        listdir.append(listfile)
+                json_str = json.dumps({dirname: listdir})
+                json_name = '%s-listdir.json' % keyname
+                self.upload_file_with_content(bucket, json_name, json_str,
+                                              content_type='application/json')
+
+            if self.global_index:
+                file_list = []
+                for path in self.paths:
+                    for root, dirs, files in os.walk(path):
+                        for file in files:
+                            filename = os.path.join(root, file)
+                            if self.include is None or self.include(filename):
+                                file_list.append(filename)
+                index_name = '%s-global-index.txt' % keyname
+                self.upload_file_with_content(bucket, index_name,
+                                              ('\n').join(file_list))
 
             meta = {'uid': stat.st_uid,
                     'gid': stat.st_gid,
@@ -425,6 +449,10 @@ def main():
     parser.add_argument('--without-index', action='store_true', default=False,
         help='Do not store a JSON representation of the current directory '
              'listing in S3 when uploading a file to S3.')
+    parser.add_argument('--global-index', action='store_true', default=False,
+        help='Store an index of all files that are in all paths'
+             'when uploading a file to S3. '
+             'Useful for multi-datadir (JBOD) cassandra.')
     parser.add_argument('--keyname-separator', default=':',
         help='Separator for the keyname between name and path.')
     parser.add_argument('-t', '--threads', default=default_threads,
@@ -465,18 +493,22 @@ def main():
     if args.exclude:
         include = lambda path: not re.search(args.exclude, path)
     if args.include:
-        include = lambda path: not not re.search(args.include, path)
+        include = lambda path: re.search(args.include, path)
 
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
+    default_log.debug('Connecting to s3')
     s3 = boto.connect_s3(args.aws_key, args.aws_secret)
+    default_log.debug('Getting bucket')
     bucket = s3.get_bucket(args.bucket)
 
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
                             secret=args.aws_secret, bucket_name=bucket,
                             prefix=args.prefix, name=args.name,
+                            paths=args.paths,
                             include=include,
                             with_index=(not args.without_index),
+                            global_index=(args.global_index),
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
                             chunk_size=int(args.multipart_chunk_size),
@@ -487,6 +519,7 @@ def main():
 
     mask = get_mask(args.listen_events)
     for path in args.paths:
+        default_log.debug('Adding watch for path %s' % path)
         ret = wm.add_watch(path, mask, rec=args.recursive,
                            auto_add=args.auto_add)
         if ret[path] == -1:
@@ -495,8 +528,10 @@ def main():
             return 1
 
     if args.backup:
+        default_log.debug('Backing up existing files')
         backup_files(handler, args.paths, args.recursive, include)
 
+    default_log.debug('Starting notifier loop')
     notifier.loop()
 
 if __name__ == '__main__':

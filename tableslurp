@@ -28,6 +28,7 @@ import os
 import pwd
 import socket
 import sys
+import errno
 from Queue import Queue
 
 log = logging.getLogger('tableslurp')
@@ -63,6 +64,7 @@ class DownloadHandler(object):
     origin = None
     prefix = None
     force = False
+    global_index = False
     name = socket.getfqdn()
     fileset = []
     queue = Queue()
@@ -78,6 +80,7 @@ class DownloadHandler(object):
         self.bucket_name = args.bucket[0]
         self.num_threads = args.threads
         self.force = args.force
+        self.global_index = args.global_index
         if args.name:
             self.name = args.name
         self.prefix = '%s:%s' % (self.name, self.origin)
@@ -101,8 +104,10 @@ class DownloadHandler(object):
 #       unsure if boto is thread-safe, will reconnect every time
         log.debug('Connecting to s3')
         conn = boto.connect_s3(self.key, self.secret)
-        bucket = conn.get_bucket(self.bucket_name)
         log.debug('Connected to s3')
+        log.debug('Getting s3 bucket %s' % self.bucket_name)
+        bucket = conn.get_bucket(self.bucket_name)
+        log.debug('Gotten')
         return bucket
 
     def _build_file_set(self, target_file=None):
@@ -110,25 +115,35 @@ class DownloadHandler(object):
         key = None
 #       If you want to restore a file-set in particular
         bucket = self._get_bucket()
+        index_suffix = '-global-index.txt' if self.global_index \
+                else '-listdir.json'
         if target_file:
-            key = bucket.get_key('%s/%s-listdir.json' %
-                (self.prefix, target_file))
+            key = bucket.get_key('%s/%s%s' % \
+                    (self.prefix, target_file, index_suffix))
 #       Otherwise try to fetch the most recent one
         else:
+            log.debug('Getting all keys for %s/*%s' % (self.prefix, index_suffix))
             keys = [_ for _ in bucket.get_all_keys(prefix='%s/' %
-                (self.prefix,)) if _.name.endswith('-listdir.json')]
+                (self.prefix,)) if _.name.endswith(index_suffix)]
             if keys:
                 keys.sort(key=lambda l: parser.parse(l.last_modified))
                 key = keys.pop()
+                log.debug('Latest key is %s' % (key.name,))
 
         if not key:
             raise LookupError('Cannot find anything to restore from %s:%s/%s' %
                 (bucket.name, self.prefix, target_file or ''))
-
-        json_data = json.loads(key.get_contents_as_string())
-        self.fileset = json_data[self.origin]
+        
+        if self.global_index:
+            # note that the returned list contains absolute paths
+            # in global-index mode
+            self.fileset = key.get_contents_as_string().split('\n')
+        else:
+            json_data = json.loads(key.get_contents_as_string())
+            self.fileset = json_data[self.origin]
         log.info('Fileset contains %d files to download' % (len(self.fileset)))
-        k = bucket.get_key('%s/%s' % (self.prefix, self.fileset[0]))
+        prefix = '%s:' % self.name if self.global_index else self.prefix
+        k = bucket.get_key('%s/%s' % (prefix, self.fileset[0]))
 #       The librato branch introduced this
         meta = k.get_metadata('stat')
         log.debug('Metadata is %s' % (meta,))
@@ -172,8 +187,14 @@ class DownloadHandler(object):
         while queue.empty() == False:
             queueddownload = queue.get()
             fname = queueddownload.filename
-            keypath = '%s/%s' % (self.prefix, fname,)
-            destfile = os.path.join(self.target, os.path.basename(fname))
+            if self.global_index:
+                prefix = '%s:' % self.name
+                destfile = os.path.join(self.target, fname[1:])
+            else:
+                prefix = '%s/' % self.prefix
+                destfile = os.path.join(self.target, os.path.basename(fname))
+
+            keypath = '%s%s' % (prefix, fname,)
 
             log.debug('Checking if we need to download %s to %s' %
                 (keypath, destfile,))
@@ -196,6 +217,12 @@ class DownloadHandler(object):
                         download = True
 
                     if download:
+                        log.debug('Creating dir %s' % (os.path.dirname(destfile)))
+                        try:
+                            os.makedirs(os.path.dirname(destfile))
+                        except OSError as exc:
+                            if exc.errno == errno.EEXIST:
+                                pass
                         log.info('Downloading %s from %s to %s' %
                             (key.name, bucket.name, destfile))
                         key.get_contents_to_filename(destfile)
@@ -270,6 +297,9 @@ def main():
         'instead of the latest one available.')
     ap.add_argument('--force', default=False, action='store_true',
         help='Force download files even if they exist')
+    ap.add_argument('--global-index', default=False, action='store_true',
+        help='Use a global index to retrieve all files from all backed'
+        ' up directories. This is useful for multi-datadir (JBOD) cassandra')
     ap.add_argument('-n', '--name', default=socket.getfqdn(),
         help='Use this name instead of the FQDN to prefix the bucket dir')
     ap.add_argument('bucket', nargs=1,
