@@ -54,9 +54,10 @@ def clean_backups(args, log):
         key=lambda k: dtparser.parse(k.last_modified),
         reverse=True, # most recent first
     ):
-        to_delete.add(k.name)
+        if not k.name.endswith('/'):
+            to_delete.add(k.name)
         index_key_suffix = '-global-index.txt' if args.global_index else '-listdir.json'
-        if k.name.endswith(index_file_suffix):
+        if k.name.endswith(index_key_suffix):
             index_keys.append(k)
 
     log.info("%s keys total", len(to_delete))
@@ -71,7 +72,7 @@ def clean_backups(args, log):
             break
         ky = bucket.get_key(ikey)
         if args.global_index:
-            fullpaths = ('\n').split(ky.get_contents_as_string())
+            fullpaths = ky.get_contents_as_string().split('\n')
         else:
             jdict = json.loads(ky.get_contents_as_string())
             if len(jdict.values()) != 1:
@@ -84,8 +85,13 @@ def clean_backups(args, log):
             key_to_keep = '%s:%s' % (args.name, x)
             if key_to_keep in to_delete:
                 to_delete.remove(key_to_keep)
-        if ikey.name in to_delete:
-            to_delete.remove(ikey.name)
+            # don't remove index files of either type
+            global_index = '%s-global-index.txt' % key_to_keep
+            if global_index in to_delete:
+                to_delete.remove(global_index)
+            json_index = '%s-listdir.json' % key_to_keep
+            if json_index in to_delete:
+                to_delete.remove(json_index)
 
     if args.debug:
         log.debug("%s non-keeper keys to delete", len(to_delete))
@@ -140,7 +146,7 @@ def main(log):
         '-g',
         '--global-index',
         dest='global_index',
-        required=False,
+        action='store_true',
         help='Use global indexes instead of JSON lists '
              '(for multi-datadir (JBOD cassandra))')
     parser.add_argument(
