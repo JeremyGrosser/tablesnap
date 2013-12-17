@@ -63,10 +63,13 @@ def clean_backups(args, log):
     log.info("%s keys total", len(to_delete))
     log.debug("%s json listdir keys", len(index_keys))
 
-    for ikey in index_keys:
+    for i, ikey in enumerate(index_keys):
         log.debug("key dated : %s (%s)", ikey.last_modified,
                   ikey.name.split('/')[-1])
-        if days_ago(ikey.last_modified) > args.age:
+        if i == 0 and args.preserve:
+            log.info("Keeping latest (%s) due to use of --preserve", ikey.last_modified)
+            # save the first due to preservation being on
+        elif days_ago(ikey.last_modified) > args.age:
             # We've gone back past our cutoff
             log.info("reached cutoff at timestamp %s", ikey.last_modified)
             break
@@ -142,6 +145,12 @@ def main(log):
         required=False,
         help='Use this name instead of the FQDN to identify the files from '
              'this host')
+    parser.add_argument(
+        '-p',
+        '--preserve',
+        dest='preserve',
+        action='store_true',
+        help='Preserve at least one file and its dependencies')
     parser.add_argument(
         '-g',
         '--global-index',
