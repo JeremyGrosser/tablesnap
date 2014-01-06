@@ -186,6 +186,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                     raise
 
                 md5 = key.compute_md5(fp)
+#               Return the cursor to the beginning of the file
+                fp.seek(0)
                 fp.close()
                 self.log.debug('Computed md5: %s' % (md5,))
 
@@ -282,6 +284,8 @@ class UploadHandler(pyinotify.ProcessEvent):
         else:
             fp = open(filename, 'rb')
             md5 = boto.utils.compute_md5(fp)
+#           Return cursor to the beginning of the file
+            fp.seek(0)
             self.log.debug('Computed md5sum before upload is: %s' % (md5,))
             fp.close()
 
