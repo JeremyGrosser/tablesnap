@@ -30,7 +30,8 @@ else:
     stderr.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
     default_log.addHandler(stderr)
 
-if os.environ.get('TDEBUG', False):
+DEBUG = os.environ.get('TDEBUG', 0)
+if DEBUG:
     default_log.setLevel(logging.DEBUG)
 else:
     default_log.setLevel(logging.INFO)
@@ -108,7 +109,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
     def get_bucket(self):
         # Reconnect to S3
-        s3 = boto.connect_s3(self.key, self.secret)
+        s3 = boto.connect_s3(self.key, self.secret, debug=DEBUG)
         return s3.get_bucket(self.bucket_name)
 
     def worker(self):
@@ -502,7 +503,7 @@ def main():
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
     default_log.debug('Connecting to s3')
-    s3 = boto.connect_s3(args.aws_key, args.aws_secret)
+    s3 = boto.connect_s3(args.aws_key, args.aws_secret, debug=DEBUG)
     default_log.debug('Getting bucket')
     bucket = s3.get_bucket(args.bucket)
 
