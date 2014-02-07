@@ -311,9 +311,9 @@ class UploadHandler(pyinotify.ProcessEvent):
                 for path in self.paths:
                     for root, dirs, files in os.walk(path):
                         for file in files:
-                            filename = os.path.join(root, file)
-                            if self.include is None or self.include(filename):
-                                file_list.append(filename)
+                            fn = os.path.join(root, file)
+                            if self.include is None or self.include(fn):
+                                file_list.append(fn)
                 index_name = '%s-global-index.txt' % keyname
                 self.upload_file_with_content(bucket, index_name,
                                               ('\n').join(file_list))
