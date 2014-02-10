@@ -310,8 +310,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                 file_list = []
                 for path in self.paths:
                     for root, dirs, files in os.walk(path):
-                        for file in files:
-                            fn = os.path.join(root, file)
+                        for targetfile in files:
+                            fn = os.path.join(root, targetfile)
                             if self.include is None or self.include(fn):
                                 file_list.append(fn)
                 index_name = '%s-global-index.txt' % keyname
