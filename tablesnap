@@ -416,8 +416,8 @@ def main():
         'the time of the copy.')
     parser.add_argument('bucket', help='S3 bucket')
     parser.add_argument('paths', nargs='+', help='Paths to be watched')
-    parser.add_argument('-k', '--aws-key', required=True)
-    parser.add_argument('-s', '--aws-secret', required=True)
+    parser.add_argument('-k', '--aws-key')
+    parser.add_argument('-s', '--aws-secret')
     parser.add_argument('-r', '--recursive', action='store_true',
         default=False,
         help='Recursively watch the given path(s)s for new SSTables')
