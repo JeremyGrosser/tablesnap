@@ -252,10 +252,8 @@ def main():
         'code is straightforward, the program assumes the files you are '
         'restoring got previously backed up with `tablesnap`',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    ap.add_argument('-k', '--aws-key',
-        required=True, help='Amazon S3 key')
-    ap.add_argument('-s', '--aws-secret',
-        required=True, help='Amazon S3 secret')
+    ap.add_argument('-k', '--aws-key', help='Amazon S3 key')
+    ap.add_argument('-s', '--aws-secret', help='Amazon S3 secret')
     ap.add_argument('-p', '--preserve', default=False, action='store_true',
         help='Preserve the permissions (if they exist) from the source. '
         'This overrides -o and -g')

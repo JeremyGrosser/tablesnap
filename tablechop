@@ -116,13 +116,11 @@ def main(log):
     parser.add_argument(
         '-k',
         '--key',
-        required=True,
         dest='key',
         help='Amazon S3 Key')
     parser.add_argument(
         '-s',
         '--secret',
-        required=True,
         dest='secret',
         help='Amazon S3 Secret')
     parser.add_argument(
