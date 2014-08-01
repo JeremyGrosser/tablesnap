@@ -263,7 +263,11 @@ class UploadHandler(pyinotify.ProcessEvent):
         if self.key_exists(bucket, keyname, filename, stat):
             return
         else:
-            fp = open(filename, 'rb')
+            try:
+                fp = open(filename, 'rb')
+            except IOError:
+                # File removed?
+                return
             md5 = boto.utils.compute_md5(fp)
             self.log.debug('Computed md5sum before upload is: %s' % (md5,))
             fp.close()
