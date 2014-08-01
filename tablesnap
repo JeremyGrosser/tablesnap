@@ -61,6 +61,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 prefix=None, name=None, max_size=None, chunk_size=None,
                 include=None,
                 with_index=True,
+                with_sse=False,
                 keyname_separator=None,
                 log=default_log,
                 md5_on_start=False):
@@ -74,6 +75,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.log = log
         self.include = include
         self.with_index = with_index
+        self.with_sse = with_sse
         self.md5_on_start = md5_on_start
 
         if max_size:
@@ -284,7 +286,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         key = bucket.new_key('%s-listdir.json' % keyname)
                         key.set_contents_from_string(json_str,
                             headers={'Content-Type': 'application/json'},
-                            replace=True)
+                            replace=True, encrypt_key=self.with_sse)
                         break
                     except:
                         if r == self.retries - 1:
@@ -322,7 +324,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                         self.log.info('Performing multipart upload for %s' %
                                      (filename))
                         mp = bucket.initiate_multipart_upload(keyname,
-                            metadata={'stat': meta, 'md5sum': md5[0]})
+                            metadata={'stat': meta, 'md5sum': md5[0]},
+                            encrypt_key=self.with_sse)
                         part = 1
                         chunk = None
                         try:
@@ -352,7 +355,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                         key.set_metadata('md5sum', md5[0])
                         key.set_contents_from_filename(filename, replace=True,
                                                        cb=progress, num_cb=1,
-                                                       md5=md5)
+                                                       md5=md5,
+                                                       encrypt_key=self.with_sse)
                     break
                 except:
                     if not os.path.exists(filename):
@@ -430,6 +434,8 @@ def main():
     parser.add_argument('--without-index', action='store_true', default=False,
         help='Do not store a JSON representation of the current directory '
              'listing in S3 when uploading a file to S3.')
+    parser.add_argument('--with-sse', action='store_true', default=False,
+        help='Enable server-side encryption for all uploads to S3.')
     parser.add_argument('--keyname-separator', default=':',
         help='Separator for the keyname between name and path.')
     parser.add_argument('-t', '--threads', default=default_threads,
@@ -482,6 +488,7 @@ def main():
                             prefix=args.prefix, name=args.name,
                             include=include,
                             with_index=(not args.without_index),
+                            with_sse=args.with_sse,
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
                             chunk_size=int(args.multipart_chunk_size),
