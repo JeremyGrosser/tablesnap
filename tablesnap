@@ -472,6 +472,9 @@ def main():
         help='Chunk size for multipart uploads (default: %dM or 10%%%% of '
              'free memory if default is not available)' % default_chunk_size)
 
+    parser.add_argument('--one-shot', action='store_true', default=False,
+            help='Process backup and exit')
+
     args = parser.parse_args()
 
     # For backwards-compatibility: If neither exclude nor include are set,
@@ -512,6 +515,10 @@ def main():
 
     if args.backup:
         backup_files(handler, args.paths, args.recursive, include)
+
+    if args.one_shot:
+        default_log.info('Backup complete, exiting due to one-shot')
+        sys.exit(0)
 
     notifier.loop()
 
