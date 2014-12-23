@@ -115,8 +115,9 @@ class DownloadHandler(object):
                 (self.prefix, target_file))
 #       Otherwise try to fetch the most recent one
         else:
+            prefix_part_count = self.prefix.count('/') + 1
             keys = [_ for _ in bucket.list(prefix='%s/' %
-                (self.prefix,)) if _.name.endswith('-listdir.json')]
+                (self.prefix,)) if _.name.endswith('-listdir.json') and _.name.count('/') == prefix_part_count]
             if keys:
                 keys.sort(key=lambda l: parser.parse(l.last_modified))
                 key = keys.pop()
@@ -195,7 +196,7 @@ class DownloadHandler(object):
                     else:
                         download = True
 
-                    if download:
+                    if download and key:
                         log.info('Downloading %s from %s to %s' %
                             (key.name, bucket.name, destfile))
                         key.get_contents_to_filename(destfile)
