@@ -61,13 +61,16 @@ def clean_backups(args, log):
     log.info("%s keys total", len(to_delete))
     log.debug("%s json listdir keys", len(json_keys))
 
+    is_old = False	# used in testing for existence of file on server
     for jkey in json_keys:
         log.debug("key dated : %s (%s)", jkey.last_modified,
                   jkey.name.split('/')[-1])
         if days_ago(jkey.last_modified) > args.age:
             # We've gone back past our cutoff
             log.info("Reached cutoff at timestamp %s", jkey.last_modified)
-            break
+            is_old = True
+            if not args.keep_existing:
+                break
         ky = bucket.get_key(jkey)
         jdict = json.loads(ky.get_contents_as_string())
         if len(jdict.values()) != 1:
@@ -76,11 +79,21 @@ def clean_backups(args, log):
         dirname = jdict.keys()[0]
         # fullpaths here since some files are in subdirectories
         fullpaths = [os.path.join(dirname, x) for x in jdict.values()[0]]
+        keep_jkey = False # assume we are deleting the jkey
         for x in fullpaths:
-            key_to_keep = '%s:%s' % (args.name, x)
-            if key_to_keep in to_delete:
-                to_delete.remove(key_to_keep)
-        if jkey.name in to_delete:
+	    keep_file = True # assume we are keeping the file - this is the default behavior
+	    # if we are checking if we should keep existing files
+	    if args.keep_existing and is_old and not os.path.isfile(x):
+	        # don't keep the file if it is old and it does not exist
+	        keep_file = False
+
+            keep_jkey = keep_jkey or keep_file  # keep the jkey if we are keeping any of the files
+	    key_to_keep = '%s:%s' % (args.name, x)
+	    # if we are keeping the file
+	    if keep_file and key_to_keep in to_delete:
+	        to_delete.remove(key_to_keep)
+
+        if keep_jkey and jkey.name in to_delete:
             to_delete.remove(jkey.name)
 
     to_del_len = len(to_delete)
@@ -127,6 +140,12 @@ def main(log):
         dest='list_deletes',
         action='store_true',
         help='Log every file being deleted')
+    parser.add_argument(
+        '-e',
+        '--keep-existing',
+        dest='keep_existing',
+        action='store_true',
+        help='Keep files that still exist on this server regardless of age')
     parser.add_argument(
         '-k',
         '--key',
