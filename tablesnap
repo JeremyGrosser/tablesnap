@@ -333,7 +333,8 @@ class UploadHandler(pyinotify.ProcessEvent):
             except:
                 pass
 
-            self.log.info('Uploading %s' % filename)
+            self.log.info('Uploading %s; %d files queued' % \
+                (filename, self.fileq.qsize()))
 
             meta = json.dumps(meta)
 
