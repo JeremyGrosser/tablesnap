@@ -49,6 +49,7 @@ def clean_backups(args, log):
 
     json_keys = []
     to_delete = set() # we'll remove from this list
+    found_one_key = false
     for k in sorted(
         key_list,
         key=lambda k: dtparser.parse(k.last_modified),
@@ -57,6 +58,11 @@ def clean_backups(args, log):
         to_delete.add(k.name)
         if k.name.endswith('-listdir.json'):
             json_keys.append(k)
+			if args.keep_existing and not found_one_key:
+			    # always keep one key regardless of age if keeping existing files
+				log.info("Keep existing set - keeping the most recent key: %s", k.name)
+                to_delete.remove(k.name)
+                found_one_key = true
 
     log.info("%s keys total", len(to_delete))
     log.debug("%s json listdir keys", len(json_keys))
