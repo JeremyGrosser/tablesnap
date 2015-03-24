@@ -49,7 +49,7 @@ def clean_backups(args, log):
 
     json_keys = []
     to_delete = set() # we'll remove from this list
-    found_one_key = false
+    found_one_key = False
     for k in sorted(
         key_list,
         key=lambda k: dtparser.parse(k.last_modified),
