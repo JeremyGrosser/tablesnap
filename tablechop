@@ -150,12 +150,14 @@ def main(log):
         '-k',
         '--key',
         dest='key',
-        help='Amazon S3 Key')
+        default=os.environ.get('AWS_ACCESS_KEY_ID'),
+        help='Amazon S3 Key (default from AWS_ACCESS_KEY_ID in environment)')
     parser.add_argument(
         '-s',
         '--secret',
         dest='secret',
-        help='Amazon S3 Secret')
+        default=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+        help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment)')
     parser.add_argument(
         '-n',
         '--name',

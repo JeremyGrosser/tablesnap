@@ -55,7 +55,6 @@ default_chunk_size = 256
 # Default inotify event to listen on
 default_listen_event = 'IN_MOVED_TO'
 
-
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
                 prefix=None, name=None, max_size=None, chunk_size=None,
@@ -424,8 +423,12 @@ def main():
         'the time of the copy.')
     parser.add_argument('bucket', help='S3 bucket')
     parser.add_argument('paths', nargs='+', help='Paths to be watched')
-    parser.add_argument('-k', '--aws-key')
-    parser.add_argument('-s', '--aws-secret')
+    parser.add_argument('-k', '--aws-key',
+        default=os.environ.get('AWS_ACCESS_KEY_ID'),
+        help='Amazon S3 Key (default from AWS_ACCESS_KEY_ID in environment')
+    parser.add_argument('-s', '--aws-secret',
+        default=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+        help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment')
     parser.add_argument('-r', '--recursive', action='store_true',
         default=False,
         help='Recursively watch the given path(s)s for new SSTables')
