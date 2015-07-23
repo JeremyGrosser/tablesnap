@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='tablesnap',
-    version='0.6.2',
+    version='0.6.4',
     author='Jeremy Grosser',
     author_email='jeremy@synack.me',
     scripts=[
