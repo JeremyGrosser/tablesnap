@@ -33,7 +33,9 @@ def clean_backups(args, log):
         args.name = socket.getfqdn()
 
     try:
-        s3conn = boto.connect_s3(args.key, args.secret)
+        s3conn = boto.connect_s3(aws_access_key_id=args.key,
+                                 aws_secret_access_key=args.secret,
+                                 security_token=args.token)
         bucket = s3conn.get_bucket(args.bucket)
     except boto.exception.BotoServerError, e:
         log.error('Problem initializing S3 connection: %s', e)
@@ -158,6 +160,9 @@ def main(log):
         dest='secret',
         default=os.environ.get('AWS_SECRET_ACCESS_KEY'),
         help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment)')
+    parser.add_argument('--token',
+        default=os.environ.get('AWS_SECURITY_TOKEN'),
+        help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
     parser.add_argument(
         '-n',
         '--name',

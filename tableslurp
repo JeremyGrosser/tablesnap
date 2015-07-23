@@ -100,7 +100,9 @@ class DownloadHandler(object):
     def _get_bucket(self):
 #       unsure if boto is thread-safe, will reconnect every time
         log.debug('Connecting to s3')
-        conn = boto.connect_s3(self.key, self.secret)
+        conn = boto.connect_s3(aws_access_key_id=self.key,
+                               aws_secret_access_key=self.secret,
+                               security_token=self.token)
         bucket = conn.get_bucket(self.bucket_name)
         log.debug('Connected to s3')
         return bucket
@@ -259,6 +261,9 @@ def main():
     ap.add_argument('-s', '--aws-secret',
         default=os.environ.get('AWS_SECRET_ACCESS_KEY'),
         help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment)')
+    ap.add_argument('--token',
+        default=os.environ.get('AWS_SECURITY_TOKEN'),
+        help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
     ap.add_argument('-p', '--preserve', default=False, action='store_true',
         help='Preserve the permissions (if they exist) from the source. '
         'This overrides -o and -g')

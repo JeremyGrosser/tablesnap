@@ -56,7 +56,8 @@ default_chunk_size = 256
 default_listen_event = 'IN_MOVED_TO'
 
 class UploadHandler(pyinotify.ProcessEvent):
-    def my_init(self, threads=None, key=None, secret=None, bucket_name=None,
+    def my_init(self, threads=None, key=None, secret=None, token=None,
+                bucket_name=None,
                 prefix=None, name=None, max_size=None, chunk_size=None,
                 include=None,
                 with_index=True,
@@ -66,6 +67,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 md5_on_start=False):
         self.key = key
         self.secret = secret
+        self.token = token
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
@@ -106,7 +108,9 @@ class UploadHandler(pyinotify.ProcessEvent):
 
     def get_bucket(self):
         # Reconnect to S3
-        s3 = boto.connect_s3(self.key, self.secret)
+        s3 = boto.connect_s3(aws_access_key_id=self.key,
+                             aws_secret_access_key=self.secret,
+                             security_token=self.token)
         return s3.get_bucket(self.bucket_name)
 
     def worker(self):
@@ -425,10 +429,13 @@ def main():
     parser.add_argument('paths', nargs='+', help='Paths to be watched')
     parser.add_argument('-k', '--aws-key',
         default=os.environ.get('AWS_ACCESS_KEY_ID'),
-        help='Amazon S3 Key (default from AWS_ACCESS_KEY_ID in environment')
+        help='Amazon S3 Key (default from AWS_ACCESS_KEY_ID in environment)')
     parser.add_argument('-s', '--aws-secret',
         default=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-        help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment')
+        help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment)')
+    parser.add_argument('--aws-token',
+        default=os.environ.get('AWS_SECURITY_TOKEN'),
+        help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
     parser.add_argument('-r', '--recursive', action='store_true',
         default=False,
         help='Recursively watch the given path(s)s for new SSTables')
@@ -487,11 +494,15 @@ def main():
 
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
-    s3 = boto.connect_s3(args.aws_key, args.aws_secret)
+
+    s3 = boto.connect_s3(aws_access_key_id=args.aws_key,
+                         aws_secret_access_key=args.aws_secret,
+                         security_token=args.aws_token)
     bucket = s3.get_bucket(args.bucket)
 
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
-                            secret=args.aws_secret, bucket_name=bucket,
+                            secret=args.aws_secret, token=args.aws_token,
+                            bucket_name=bucket,
                             prefix=args.prefix, name=args.name,
                             include=include,
                             with_index=(not args.without_index),
