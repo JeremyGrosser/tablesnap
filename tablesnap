@@ -252,6 +252,12 @@ class UploadHandler(pyinotify.ProcessEvent):
         if f and not f.closed:
             f.close()
 
+    def should_create_index(self, filename):
+        """ Should we upload a JSON index for this file? Cassandra
+            SSTables are composed of six files, so only generate a
+            JSON file when we upload a .Data.db file. """
+        return ("Data.db" in filename)
+
     def upload_sstable(self, bucket, keyname, filename):
 
         # Include the file system metadata so that we have the
@@ -281,7 +287,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
         try:
             dirname = os.path.dirname(filename)
-            if self.with_index:
+            if self.with_index and self.should_create_index(filename):
                 listdir = []
                 for listfile in os.listdir(dirname):
                     if self.include is None or (self.include is not None
