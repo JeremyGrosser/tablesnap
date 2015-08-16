@@ -1,14 +1,14 @@
 #! /bin/sh
 #
-# skeleton	example file to build /etc/init.d/ scripts.
-#		This file should be used to construct scripts for /etc/init.d.
+# skeleton    example file to build /etc/init.d/ scripts.
+#        This file should be used to construct scripts for /etc/init.d.
 #
-#		Written by Miquel van Smoorenburg <miquels@cistron.nl>.
-#		Modified for Debian
-#		by Ian Murdock <imurdock@gnu.ai.mit.edu>.
+#        Written by Miquel van Smoorenburg <miquels@cistron.nl>.
+#        Modified for Debian
+#        by Ian Murdock <imurdock@gnu.ai.mit.edu>.
 #               Further changes by Javier Fernandez-Sanguino <jfs@debian.org>
 #
-# Version:	@(#)skeleton  1.9  26-Feb-2001  miquels@cistron.nl
+# Version:    @(#)skeleton  1.9  26-Feb-2001  miquels@cistron.nl
 #
 ### BEGIN INIT INFO
 # Provides:          tablesnap
@@ -74,9 +74,10 @@ case "$1" in
     daemon_start || exit 1
     ;;
   force-reload)
-	# synonym for restart
-	daemon_stop
-	daemon_start || exit 1
+    # synonym for restart
+    daemon_stop
+    daemon_start || exit 1
+    ;;
   status)
     status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
     ;;
