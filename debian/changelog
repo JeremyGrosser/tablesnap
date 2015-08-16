@@ -13,7 +13,8 @@ tablesnap (0.7.0-1) unstable; urgency=low
   * This way both approaches work
 
   [ Eyal Reuveni ]
-  * Some memory usage help - decreasing the number of extraneous data structures kept around.
+  * Some memory usage help - decreasing the number of extraneous data
+    structures kept around.
 
   [ Ethan ]
   * Joins paths to handle Cassandra 1.1 subdirs, interface more like tableslurp
@@ -40,7 +41,9 @@ tablesnap (0.7.0-1) unstable; urgency=low
 
   [ Paul Freeman ]
   * added a flag -e to keep files backed up that exist on the server
-  * fixing an issue where a subdirectory of the origin arg might be the latest 'key' found which causes an exception when reading the json data using the origin key
+  * fixing an issue where a subdirectory of the origin arg might be the latest
+    'key' found which causes an exception when reading the json data using the
+    origin key
 
   [ Maciek Sakrejda ]
   * Accept S3 credentials from environment
