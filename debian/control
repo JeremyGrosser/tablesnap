@@ -1,0 +1,12 @@
+Source: tablesnap
+Section: database
+Priority: extra
+Maintainer: Jeremy Grosser <jeremy@synack.me>
+Build-Depends: debhelper (>= 8), dh-python, python-all (>= 2.6.6-3~), python-setuptools
+Standards-Version: 3.8.3
+X-Python-Version: >= 2.6
+
+Package: tablesnap
+Architecture: any
+Depends: ${python:Depends}, python-pyinotify, python-boto, python-dateutil, python-argparse
+Description: Uses inotify to monitor Cassandra SSTables and upload them to S3

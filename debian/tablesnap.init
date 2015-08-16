@@ -1,0 +1,86 @@
+#! /bin/sh
+#
+# skeleton	example file to build /etc/init.d/ scripts.
+#		This file should be used to construct scripts for /etc/init.d.
+#
+#		Written by Miquel van Smoorenburg <miquels@cistron.nl>.
+#		Modified for Debian
+#		by Ian Murdock <imurdock@gnu.ai.mit.edu>.
+#               Further changes by Javier Fernandez-Sanguino <jfs@debian.org>
+#
+# Version:	@(#)skeleton  1.9  26-Feb-2001  miquels@cistron.nl
+#
+### BEGIN INIT INFO
+# Provides:          tablesnap
+# Required-Start:    $syslog
+# Required-Stop:     $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: tablesnap
+# Description:       Starts Tablesnap,for saving Cassandra data to S3
+### END INIT INFO
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/usr/bin/tablesnap
+NAME=tablesnap
+DESC=tablesnap
+
+test -x $DAEMON || exit 0
+
+LOGDIR=/var/log/tablesnap
+PIDFILE=/var/run/$NAME.pid
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+
+# Include defaults if available
+if [ -f /etc/default/tablesnap ] ; then
+    . /etc/default/tablesnap
+fi
+
+if [ "$RUN" != "yes" ]; then
+    echo "Set RUN=yes in /etc/default/tablesnap to start"
+    exit 0
+fi
+
+set -e
+
+daemon_start() {
+    log_daemon_msg "Starting $DESC daemon" "$NAME"
+    start-stop-daemon --start --quiet --oknodo --make-pidfile --background \
+        --name "$NAME" --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+    status=$?
+    log_end_msg $status
+}
+
+daemon_stop() {
+    log_daemon_msg "Stopping $DESC daemon" "$NAME"
+    start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE \
+        --name "$NAME"
+    log_end_msg $?
+    rm -f $PIDFILE
+}
+
+case "$1" in
+  start)
+    daemon_start || exit 1
+    ;;
+  stop)
+    daemon_stop || exit 1
+    ;;
+  restart)
+    daemon_stop
+    daemon_start || exit 1
+    ;;
+  status)
+    status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
+    ;;
+  *)
+    N=/etc/init.d/$NAME
+    echo "Usage: $N {start|stop|restart|status}" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

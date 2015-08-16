@@ -1,0 +1,197 @@
+tablesnap (0.7.0-1) unstable; urgency=medium
+
+  [ Jorge A Gallegos ]
+  * Adding argparse to the list of requirements
+
+  [ Ethan ]
+  * tablechop for cleaning up old tablesnap files
+  * Cleanup for log lvl and terms used
+  * Joins paths to handle Cassandra 1.1 subdirs, interface more like tableslurp
+
+  [ Jorge Gallegos ]
+  * these get created when setup.py runs
+  * This way both approaches work
+
+  [ Eyal Reuveni ]
+  * Some memory usage help - decreasing the number of extraneous data structures kept around.
+
+  [ Ethan ]
+  * Joins paths to handle Cassandra 1.1 subdirs, interface more like tableslurp
+
+  [ Eyal Reuveni ]
+  * Some memory usage help - decreasing the number of extraneous data structures kept around.
+
+  [ Jorge Gallegos ]
+  * Why is computing MD5 at boot potentially
+  * Make the -listdir.json file aware of filters
+
+  [ Ethan ]
+  * Adds list deleted files option to tablechop
+  * File can get compacted away while checking S3 to see if the key exists
+
+  [ Robin Gustafsson ]
+  * Make sure all S3 keys are listed
+
+  [ qhartman ]
+  * Update tablesnap.init to include LSB header
+
+  [ Alain Vandendorpe ]
+  * Added support for server-side encryption
+
+  [ Michael Kania ]
+  * Remove requirement for aws keys since boto can use IAM roles.
+
+  [ Paul Freeman ]
+  * added a flag -e to keep files backed up that exist on the server
+  * fixing an issue where a subdirectory of the origin arg might be the latest 'key' found which causes an exception when reading the json data using the origin key
+
+  [ Maciek Sakrejda ]
+  * Accept S3 credentials from environment
+  * Add STS support
+  * Bump version
+
+  [ Russ Garrett ]
+  * Only upload json files once per sstable write
+
+  [ Jeremy Grosser ]
+
+ -- Jorge A Gallegos <kad@blegh.net>  Sun, 16 Aug 2015 06:53:44 -0700
+
+tablesnap (0.6.2-1) precise; urgency=low
+
+  [ Christoph Tavan ]
+  * Migrate from optparse to argparse.
+  * Update README
+  * Also listen for IN_CLOSE_WRITE events, not only IN_MOVED_TO.
+  * Make listen events configurable
+  * Update README
+  * Add --include parameter.
+  * Update readme
+  * Update debian init to work with start-stop-daemon instead of daemon
+  * Use python syslog logging when started as a daemon.
+  * Install default config to /etc/default/tablesnap
+  * Comment on how to handle the log output with syslog-ng
+
+ -- Christoph Tavan <dev@tavan.de>  Tue, 13 Nov 2012 19:04:42 +0000
+
+tablesnap (0.6.1-1) precise; urgency=low
+
+  [ Jorge Gallegos ]
+  * Fixes Issue #10
+
+  [ Aaron Morton ]
+  * remove duplicate backup_files() funcs
+
+  [ Christoph Tavan ]
+  * Fix initial backup on startup that got broken with 96cd44bf4077e70186c8ef83662facbe4ef11a34
+  * Add --backup-switch that is also described in the README
+  * Update usage instructions in README
+  * Add --exclude option to allow changing the hardcoded '-tmp' filter.
+  * Add --without-index option to skip creation of -listdir.json files.
+  * Make keyname separator configurable and default to ':'
+  * Enforce uploading with full path in initial uploads.
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 07 Nov 2012 21:52:37 +0000
+
+tablesnap (0.6.0-1) precise; urgency=low
+
+  * Multipart uploads to S3
+  * Configurable logging
+  * I/O thread with retry logic
+
+ -- Jeremy Grosser <jeremy@synack.me>  Tue, 25 Sep 2012 23:05:42 +0000
+
+tablesnap (0.4.3-2) lucid; urgency=low
+
+  * Adding python-dateutil
+
+ -- Jorge Gallegos <kad@prod-ops-pkg1.evbops.com>  Wed, 08 Aug 2012 22:52:15 -0700
+
+tablesnap (0.4.3-1) lucid; urgency=low
+
+  [ Jorge Gallegos ]
+  * Merged librato branch up to 0.4.3
+  * Added tableslurp restore command
+
+ -- Jorge Gallegos <kad@eventbrite.com>  Wed, 08 Aug 2012 22:26:08 -0700
+
+tablesnap (0.2-1sg12) maverick; urgency=low
+
+  [ Jeremy Grosser ]
+  * Upload using the full path name
+  * Don't upload -tmp files
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Thu, 17 Nov 2011 00:07:38 +0000
+
+tablesnap (0.2-1sg11) maverick; urgency=low
+
+  * UNRELEASED
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Wed, 16 Nov 2011 23:38:48 +0000
+
+tablesnap (0.2-1sg1) maverick; urgency=low
+
+  * New upstream release
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 16 Nov 2011 14:37:23 -0800
+
+tablesnap (0.1-1sg8) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Require RUN=yes to be set
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:41:20 +0000
+
+tablesnap (0.1-1sg7) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Timestamps on logs
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:29:55 +0000
+
+tablesnap (0.1-1sg6) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Simplify init script
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:26:18 +0000
+
+tablesnap (0.1-1sg5) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Fix dependency
+  * Fix dependencies
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:04:04 +0000
+
+tablesnap (0.1-1sg4) lucid; urgency=low
+
+  [ Jeremy Grosser ]
+  * Refactor a bit
+  * Missing format string
+  * Debian fixups
+  * Add init script, remove source/format for native package
+  * Add license
+  * Widen the filter a bit
+  * Use daemon.c(1) to run in init script
+  * Add source/format
+
+  [ SimpleGeo Nerds ]
+
+ -- SimpleGeo Nerds <nerds@simplegeo.com>  Tue, 19 Apr 2011 21:01:55 +0000
+
+tablesnap (0.1-1sg0) unstable; urgency=low
+
+  * Initial release
+
+ -- Jeremy Grosser <jeremy@synack.me>  Tue, 19 Apr 2011 20:06:37 +0000
