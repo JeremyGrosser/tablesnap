@@ -2,7 +2,7 @@ This work was packaged for Debian by:
 
     Jeremy Grosser <jeremy@synack.me> on Tue, 19 Apr 2011 20:06:37 +0000
 
-It was downloaded from <url://example.com>
+It was downloaded from https://github.com/JeremyGrosser/tablesnap
 
 Upstream Author(s):
 
@@ -41,5 +41,5 @@ The Debian packaging is:
 
     Copyright (C) 2011-2015 Jeremy Grosser <jeremy@synack.me>
 
-and is licensed under BSD.
-see `/usr/share/common-licenses/BSD'.
+and is licensed under GPL-2.
+see `/usr/share/common-licenses/GPL-2'.

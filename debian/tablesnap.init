@@ -12,12 +12,12 @@
 #
 ### BEGIN INIT INFO
 # Provides:          tablesnap
-# Required-Start:    $syslog
-# Required-Stop:     $syslog
+# Required-Start:    $syslog $remote_fs
+# Required-Stop:     $syslog $remote_fs
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: tablesnap
-# Description:       Starts Tablesnap,for saving Cassandra data to S3
+# Description:       Starts Tablesnap, for saving Cassandra data to S3
 ### END INIT INFO
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
@@ -73,6 +73,10 @@ case "$1" in
     daemon_stop
     daemon_start || exit 1
     ;;
+  force-reload)
+	# synonym for restart
+	daemon_stop
+	daemon_start || exit 1
   status)
     status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
     ;;
