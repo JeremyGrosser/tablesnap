@@ -4,13 +4,15 @@ This work was packaged for Debian by:
 
 It was downloaded from https://github.com/JeremyGrosser/tablesnap
 
-Upstream Author:
+Upstream Authors:
 
     Jeremy Grosser <jeremy@synack.me>
+	Jorge A Gallegos <kad@blegh.net>
 
 Copyright:
 
     Copyright (C) 2011-2015 Jeremy Grosser
+	Copyright (c) 2012, Jorge A Gallegos <kad@blegh.net>
 	All rights reserved.
 
 License:
