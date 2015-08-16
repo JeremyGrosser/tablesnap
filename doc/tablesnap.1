@@ -1,0 +1,168 @@
+.\" Process this file with
+.\" groff -man -Tascii tablesnap.1
+.\"
+.TH TABLESNAP 1 "August 2015"
+.SH NAME
+tablesnap \- cassandra backup utility
+.SH SYNOPSIS
+.B tablesnap [-hraB] [-k
+.I AWS_KEY
+.B ] [-s
+.I AWS_SECRET
+.B ] [--aws-token
+.I AWS_TOKEN
+.B ] [-p
+.I PREFIX
+.B ] [--without-index] [--with-sse] [--keyname-separator
+.I KEYNAME_SEPARATOR
+.B ] [-t
+.I THREADS
+.B ] [-n
+.I NAME
+.B ] [--md5-on-start] [--listen-events
+.I {IN_MOVED_TO,IN_CLOSE_WRITE}
+.B [-e
+.I EXCLUDE
+.B ] [-i
+.I INCLUDE
+.B ] [--max-upload-size
+.I MAX_UPLOAD_SIZE
+.B ] [--multipart-chunk-size
+.I MULTIPART_CHUNK_SIZE
+.B ]
+.I bucket paths
+.B [paths ...]
+.SH DESCRIPTION
+.B tablesnap
+uses inotify to monitor a directory for events and reacts to them by spawning a
+thread to upload new files to Amazon S3, along with a JSON-formatted list of
+what other files were in the directory at the time of the copy.
+.I bucket
+is the name of the S3 bucket to upload files to and
+.I paths
+is one or more directories to monitor for changes.
+.SH OPTIONS
+.IP "-k, --aws-key=AWS_KEY"
+Amazon S3 Key (defaults to
+.B AWS_ACCESS_KEY_ID
+in environment)
+.IP "-s, --aws-secret=AWS_SECRET"
+Amazon S3 Secret (defaults to
+.B AWS_SECRET_ACCESS_KEY
+in environment)
+.IP "--aws-token=AWS_SECURITY_TOKEN"
+Amazon S3 Token (defaults to
+.B AWS_SECURITY_TOKEN
+in environment)
+.IP "-r, --recursive"
+recursively watch the given path(s) for new SSTables
+.IP "-a, --auto-add"
+automatically start watching new subdirectories within path(s)
+.IP "-B, --backup"
+backup existing files to S3 if they're not already there
+.IP "-p, --prefix"
+set a string prefix for files uploaded to S3
+.IP "--without-index"
+do not store a JSON representation of the current directory listing
+(-listdir.json) in S3 when uploading a file
+.IP "--with-sse"
+enable server-side encryption for all uploads to S3
+.IP "--keyname-separator=SEPARATOR"
+separator between the filename and path in S3 keys (default ':')
+.IP "-t, --threads=THREADS"
+number of writer threads (default 4)
+.IP "-n, --name=NAME"
+use this name to identify files uploaded from this host (defaults to your
+host's FQDN)
+.IP "--md5-on-start"
+compute the MD5 checksum of every monitored file on startup
+.IP "--listen-events={IN_MOVED_TO,IN_CLOSE_WRITE}"
+which inotify events to listen for. (default IN_MOVED_TO)
+.IP "-e, --exclude=PATTERN"
+exclude files matching this regular expression from upload. Cannot be used with
+.B --include
+.I If neither --exclude or --include are defined, all files matching "-tmp" are
+excluded
+.IP "-i, --include=PATTERN"
+opposite of
+.B --exclude
+.IP "--max-upload-size=NUMBER"
+max size in MB for files to be uploaded before switching to multipart mode. (default 5120)
+.IP "--multipart-chunk-size=NUMBER"
+chunk size in MB for multipart uploads (default 256)
+.SH ENVIRONMENT
+.IP AWS_ACCESS_KEY_ID
+Amazon access key to be used if
+.B --aws-key
+is not specified
+.IP AWS_SECRET_ACCESS_KEY
+Amazon secret key to be used if
+.B --aws-secret
+is not specified
+.IP AWS_SECURITY_TOKEN
+Amazon security token to be used if
+.B --aws-token
+is not specified
+.IP TABLESNAP_SYSLOG
+If set, all log messages will be sent to syslog under the
+.I DAEMON
+facility instead of stderr
+.IP TDEBUG
+If set, logs are emitted at the
+.I DEBUG
+level (default INFO)
+.SH DIAGNOSTICS
+The following diagnostics may be issued on stderr:
+ 
+Skipping
+.I filename
+due to exclusion rule
+.RS
+The given file is not being uploaded because it matched the pattern given by
+.I --exclude
+.RE
+Failed uploading
+.I filename
+. Aborting.
+.RS
+An unhandled exception was caught when trying to upload a file.
+.B tablesnap(1)
+will terminate itself and all child threads after emitting this message.
+.RE
+Failed to lookup keyname
+.I name
+after
+.I number
+retries
+.RS
+While trying to check whether or not the key has already been uploaded to S3
+and MD5 is valid, the request failed and the maximum number of retries were
+exceeded.
+.RE
+Failed to open file:
+.I filename
+.RS
+The file could not be opened when trying to verify it's MD5 checksum.
+.RE
+Failed to upload directory listing
+.RS
+Uploading the -listdir.json file failed due to an uncaught exception and the
+maximum number of retries was exceeded.
+.RE
+Error uploading part
+.I number
+.RS
+One of the uploads failed during a multipart upload. The multipart operation
+will be cancelled and retried from the beginning.
+.RE
+Failed to upload file contents
+.RS
+The file upload failed and the max number of retries were exceeded.
+.SH BUGS
+Please report all bugs to the maintainers at https://github.com/JeremyGrosser/tablesnap/issues
+.SH AUTHORS
+Jeremy Grosser <jeremy@synack.me>
+Jorge A Gallegos <kad@blegh.net>
+.SH "SEE ALSO"
+.BR tablechop (1),
+.BR tableslurp (1)
