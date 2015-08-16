@@ -1,3 +1,62 @@
+tablesnap (0.7.0-1) unstable; urgency=medium
+
+  [ Jorge A Gallegos ]
+  * Adding argparse to the list of requirements
+
+  [ Ethan ]
+  * tablechop for cleaning up old tablesnap files
+  * Cleanup for log lvl and terms used
+  * Joins paths to handle Cassandra 1.1 subdirs, interface more like tableslurp
+
+  [ Jorge Gallegos ]
+  * these get created when setup.py runs
+  * This way both approaches work
+
+  [ Eyal Reuveni ]
+  * Some memory usage help - decreasing the number of extraneous data structures kept around.
+
+  [ Ethan ]
+  * Joins paths to handle Cassandra 1.1 subdirs, interface more like tableslurp
+
+  [ Eyal Reuveni ]
+  * Some memory usage help - decreasing the number of extraneous data structures kept around.
+
+  [ Jorge Gallegos ]
+  * Why is computing MD5 at boot potentially
+  * Make the -listdir.json file aware of filters
+
+  [ Ethan ]
+  * Adds list deleted files option to tablechop
+  * File can get compacted away while checking S3 to see if the key exists
+
+  [ Robin Gustafsson ]
+  * Make sure all S3 keys are listed
+
+  [ qhartman ]
+  * Update tablesnap.init to include LSB header
+
+  [ Alain Vandendorpe ]
+  * Added support for server-side encryption
+
+  [ Michael Kania ]
+  * Remove requirement for aws keys since boto can use IAM roles.
+
+  [ Paul Freeman ]
+  * added a flag -e to keep files backed up that exist on the server
+  * fixing an issue where a subdirectory of the origin arg might be the latest 'key' found which causes an exception when reading the json data using the origin key
+
+  [ Maciek Sakrejda ]
+  * Accept S3 credentials from environment
+  * Add STS support
+  * Bump version
+
+  [ Russ Garrett ]
+  * Only upload json files once per sstable write
+
+  [ Jeremy Grosser ]
+
+ -- Jorge A Gallegos <kad@blegh.net>  Sun, 16 Aug 2015 06:53:44 -0700
+
 tablesnap (0.6.2-1) precise; urgency=low
 
   [ Christoph Tavan ]
