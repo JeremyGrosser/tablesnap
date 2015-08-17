@@ -12,8 +12,8 @@ git push origin --all
 git push origin --tags
 # Change upstream version in first line to match X.Y.Z-1
 git-buildpackage --git-debian-branch=debian --git-upstream-branch=master --git-builder='pdebuild --configfile ~/.pbuilderrc'
-debsign -k KEYID ~/packages/tablesnap_X.Y.Z-1_amd64.changes
-dput ppa:synack/tablesnap ~/packages/tablesnap_X.Y.Z-1_amd64.changes
+debsign -k KEYID ../tablesnap_X.Y.Z-1_source.changes
+dput ppa:synack/tablesnap ../tablesnap_X.Y.Z-1_source.changes
 python setup.py sdist
 twine upload dist/tablesnap-X.Y.Z.tar.gz
 rm -rf dist *.egg-info
