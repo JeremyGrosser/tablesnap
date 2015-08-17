@@ -1,3 +1,3 @@
 version=3
 opts=filenamemangle=s/.+\/v?(\d\S*)\.tar\.gz/tablesnap-$1\.tar\.gz/ \
-  https://github.com/JeremyGrosser/tablesnap/tags .*/v?(\d\S*)\.tar\.gz
+  https://github.com/JeremyGrosser/tablesnap/tags /JeremyGrosser/tablesnap/archive/v?(\d\S*)\.tar\.gz
