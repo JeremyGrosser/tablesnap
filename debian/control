@@ -6,6 +6,8 @@ Build-Depends: debhelper (>= 8), dh-python, python-all (>= 2.6.6-3~), python-set
 Standards-Version: 3.9.6
 X-Python-Version: >= 2.6
 Homepage: https://github.com/JeremyGrosser/tablesnap
+Vcs-Git: git://github.com/JeremyGrosser/tablesnap
+Vcs-Browser: https://github.com/JeremyGrosser/tablesnap
 
 Package: tablesnap
 Architecture: any
