@@ -1,0 +1,114 @@
+.\" Process this file with
+.\" groff -man -Tascii tableslurp.1
+.\"
+.TH TABLESLURP 1 "August 2015"
+.SH NAME
+tableslurp \- cassandra backup utility
+.SH SYNOPSIS
+.B tableslurp [-hp] [-k
+.I AWS_KEY
+.B ] [-s
+.I AWS_SECRET
+.B ] [--token
+.I AWS_TOKEN
+.B ] [-o
+.I OWNER
+.B ] [-g
+.I GROUP
+.B ] [-t
+.I THREADS
+.B ] [-f
+.I FILE
+.B ] [--force] [-n
+.I NAME
+.B ]
+.I bucket origin target
+.SH DESCRIPTION
+.B tableslurp
+This is the companion script to the 
+.I tablesnap(1)
+program which you can use to restore files from an Amazon S3 bucket to a local
+directory which you have write permissions on. While the code is
+straightforward, the program assumes the files you are restoring were
+previously backed up with
+.I tablesnap(1)
+.SH OPTIONS
+.IP "-k, --aws-key=AWS_KEY"
+Amazon S3 Key (defaults to
+.B AWS_ACCESS_KEY_ID
+in environment)
+.IP "-s, --aws-secret=AWS_SECRET"
+Amazon S3 Secret (defaults to
+.B AWS_SECRET_ACCESS_KEY
+in environment)
+.IP "--token=AWS_SECURITY_TOKEN"
+Amazon S3 Token (defaults to
+.B AWS_SECURITY_TOKEN
+in environment)
+.IP "-p, --preserve"
+preserve permissions (if they exist) from the source. This overrides -o and -g
+.IP "-o OWNER, --owner=OWNER"
+after download, chown files to this user
+.IP "-g GROUP, --group=GROUP"
+after download, chgrp files to this group
+.IP "-t THREADS, --threads=THREADS"
+split the download between this many threads (default 4)
+.IP "-f FILE, --file=FILE"
+if specified, will download the fileset this file belongs to instead of the
+latest one available
+.IP "--force"
+force download of files even if they already exist locally
+.IP "-n NAME, --name=NAME"
+use this name instead of the FQDN to prefix the bucket directory
+.SH ENVIRONMENT
+.IP AWS_ACCESS_KEY_ID
+Amazon access key to be used if
+.B --aws-key
+is not specified
+.IP AWS_SECRET_ACCESS_KEY
+Amazon secret key to be used if
+.B --aws-secret
+is not specified
+.IP AWS_SECURITY_TOKEN
+Amazon security token to be used if
+.B --aws-token
+is not specified
+.IP TDEBUG
+If set, logs are emitted at the
+.I DEBUG
+level (default INFO)
+.IP USER
+Used to determine the default uid/gid to chown files after download
+.SH DIAGNOSTICS
+The following diagnostics may be issued on stderr:
+ 
+Could not parse stat metadata for
+.I filename
+.RS
+The JSON object downloaded from the bucket's "stat" key did not contain valid JSON
+.RE
+Cannot find anything to restore from
+.I PATH
+.RS
+No -listdir.json files were found in the bucket with the specified prefix and name.
+.RE
+Incomplete stat metadata for
+.I PATH
+will ignore
+.RS
+The JSON object downloaded from the bucket's "stat" key did not contain user
+and group keys.
+.RE
+Failed to download
+.I filename
+retrying
+.RS
+The S3 download failed, it will be retried up to 5 times.
+.SH BUGS
+Please report all bugs to the maintainers at https://github.com/JeremyGrosser/tablesnap/issues
+.SH AUTHORS
+Jeremy Grosser <jeremy@synack.me>
+Jorge A Gallegos <kad@blegh.net>
+.SH "SEE ALSO"
+.BR tablechop (1),
+.BR tablesnap (1)

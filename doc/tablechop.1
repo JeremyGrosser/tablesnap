@@ -1,0 +1,88 @@
+.\" Process this file with
+.\" groff -man -Tascii tablechop.1
+.\"
+.TH TABLECHOP 1 "August 2015"
+.SH NAME
+tablechop \- cassandra backup utility
+.SH SYNOPSIS
+.B tablechop [-hdle] [ -k
+.I AWS_KEY
+.B ] [-s
+.I AWS_SECRET
+.B ] [--token
+.I AWS_TOKEN
+.B ] [-n
+.I NAME
+.I bucket path age
+.SH DESCRIPTION
+.B tablechop
+Clean SSTables from S3. Scroll backwards through -listdir.json keys in
+chronological order collecting a "keeper" list until it reaches it's age
+cutoff. Deletes all keys not in that list.
+.SH OPTIONS
+.IP "-k, --key=AWS_KEY"
+Amazon S3 Key (defaults to
+.B AWS_ACCESS_KEY_ID
+in environment)
+.IP "-s, --secret=AWS_SECRET"
+Amazon S3 Secret (defaults to
+.B AWS_SECRET_ACCESS_KEY
+in environment)
+.IP "--token=AWS_SECURITY_TOKEN"
+Amazon S3 Token (defaults to
+.B AWS_SECURITY_TOKEN
+in environment)
+.IP "-d, --debug"
+run in debug mode, will not delete keys
+.IP "-l, --list-deletes"
+log every file being deleted
+.IP "-e, --keep-existing"
+keep files that still exist on this server regardless of age
+.IP "-n, --name=NAME"
+use this name to identify files uploaded from this host (defaults to your
+host's FQDN)
+.SH ENVIRONMENT
+.IP AWS_ACCESS_KEY_ID
+Amazon access key to be used if
+.B --aws-key
+is not specified
+.IP AWS_SECRET_ACCESS_KEY
+Amazon secret key to be used if
+.B --aws-secret
+is not specified
+.IP AWS_SECURITY_TOKEN
+Amazon security token to be used if
+.B --aws-token
+is not specified
+.IP TDEBUG
+If set, logs are emitted at the
+.I DEBUG
+level (default INFO)
+.SH DIAGNOSTICS
+The following diagnostics may be issued on stderr:
+ 
+Problem initializing S3 connection
+.RS
+A server error was returned from the S3 API when trying to retrieve the bucket
+.RE
+Problem getting keys from S3 bucket
+.RS
+A server error was returned from the S3 API when trying to list keys matching a
+pattern.
+.RE
+-listdir.json file should have a single key/value pair!
+.RS
+The -listdir.json file downloaded from S3 did not contain a simple hash of keys
+and values.
+.RE
+S3 delete ERR, will try again later
+.RS
+An uncaught exception occurred when trying to delete keys from the S3 bucket.
+.SH BUGS
+Please report all bugs to the maintainers at https://github.com/JeremyGrosser/tablesnap/issues
+.SH AUTHORS
+Jeremy Grosser <jeremy@synack.me>
+Jorge A Gallegos <kad@blegh.net>
+.SH "SEE ALSO"
+.BR tablesnap (1),
+.BR tableslurp (1)
