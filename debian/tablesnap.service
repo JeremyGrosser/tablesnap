@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup utility for the Cassandra database
+
+[Service]
+User=root
+EnvironmentFile=-/etc/default/tablesnap
+ExecStart=/usr/bin/tablesnap $DAEMON_OPTS
+[Install]
+WantedBy=multi-user.target

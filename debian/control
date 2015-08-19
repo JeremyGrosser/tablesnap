@@ -2,7 +2,7 @@ Source: tablesnap
 Section: database
 Priority: extra
 Maintainer: Jeremy Grosser <jeremy@synack.me>
-Build-Depends: debhelper (>= 8), dh-python, python-all (>= 2.6.6-3~), python-setuptools
+Build-Depends: debhelper (>= 9), dh-python, python-all (>= 2.6.6-3~), python-setuptools
 Standards-Version: 3.9.6
 X-Python-Version: >= 2.6
 Homepage: https://github.com/JeremyGrosser/tablesnap
@@ -11,7 +11,7 @@ Vcs-Browser: https://github.com/JeremyGrosser/tablesnap
 
 Package: tablesnap
 Architecture: any
-Depends: ${misc:Depends}, ${python:Depends}, python-pyinotify, python-boto, python-dateutil, python-argparse
+Depends: ${misc:Depends}, ${python:Depends}
 Description: Backup utility for the Cassandra database
  Tablesnap is a script that uses inotify to monitor a directory for IN_MOVED_TO
  events and reacts to them by spawning a new thread to upload that file to
