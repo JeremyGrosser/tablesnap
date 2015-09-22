@@ -135,8 +135,13 @@ class DownloadHandler(object):
         log.info('Fileset contains %d files to download' % (len(self.fileset)))
         k = bucket.get_key('%s/%s' % (self.prefix, self.fileset[0]))
 #       The librato branch introduced this
-        meta = k.get_metadata('stat')
-        log.debug('Metadata is %s' % (meta,))
+        if k:
+          meta = k.get_metadata('stat')
+          log.debug('Metadata is %s' % (meta,))
+        else:
+          meta = None
+          log.debug('Empty directory? No metadata was set on %s/%s' % (self.prefix, self.fileset[0]))
+
         owner = None
         group = None
         if meta:
