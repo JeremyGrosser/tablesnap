@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 #
 # -*- mode:python; sh-basic-offset:4; indent-tabs-mode:nil; coding:utf-8 -*-
 # vim:set tabstop=4 softtabstop=4 expandtab shiftwidth=4 fileencoding=utf-8:
@@ -26,6 +26,7 @@ import logging
 import threading
 import os
 import pwd
+import glob
 import socket
 import sys
 from Queue import Queue
@@ -66,6 +67,7 @@ class DownloadHandler(object):
     force = False
     name = socket.getfqdn()
     fileset = []
+    dest = {}
     queue = Queue()
     num_threads = 4
     threads = {}
@@ -86,6 +88,10 @@ class DownloadHandler(object):
 
 #       It may be a bit sub-optimal, but I rather fail sooner than later
         (owner, group) = self._build_file_set(args.file)
+
+        for f in os.listdir(self.target):
+            fileName = f[:f.index('-')]
+            self.dest[fileName] = "/".join([self.target,f])
 
         if not self.preserve:
             owner = args.owner
@@ -112,45 +118,58 @@ class DownloadHandler(object):
     def _build_file_set(self, target_file=None):
         log.info('Building fileset')
         key = None
-#       If you want to restore a file-set in particular
+        #If you want to restore a file-set in particular
         bucket = self._get_bucket()
+        keys = []
+
         if target_file:
-            key = bucket.get_key('%s/%s-listdir.json' %
-                (self.prefix, target_file))
-#       Otherwise try to fetch the most recent one
+            keys = [bucket.get_key('%s/%s-listdir.json' %
+                (self.prefix, target_file))]
+        #Otherwise try to fetch the most recent one
         else:
-            prefix_part_count = self.prefix.count('/') + 1
-            keys = [_ for _ in bucket.list(prefix='%s/' %
-                (self.prefix,)) if _.name.endswith('-listdir.json') and _.name.count('/') == prefix_part_count]
+            prefix_part_count = self.prefix.count('/')+2
+
+            for key in bucket.list(prefix=self.prefix):
+                if key.name.endswith('-listdir.json') and key.name.count('/') == prefix_part_count:
+                    keys.append(key)
+
             if keys:
                 keys.sort(key=lambda l: parser.parse(l.last_modified))
-                key = keys.pop()
 
-        if not key:
+        if not keys:
             raise LookupError('Cannot find anything to restore from %s:%s/%s' %
                 (bucket.name, self.prefix, target_file or ''))
 
-        json_data = json.loads(key.get_contents_as_string())
-        self.fileset = json_data[self.origin]
-        log.info('Fileset contains %d files to download' % (len(self.fileset)))
-        k = bucket.get_key('%s/%s' % (self.prefix, self.fileset[0]))
-#       The librato branch introduced this
-        meta = k.get_metadata('stat')
-        log.debug('Metadata is %s' % (meta,))
         owner = None
         group = None
-        if meta:
-            try:
-                json_data = json.loads(meta)
-                owner = json_data['user']
-                group = json_data['group']
-            except TypeError as te:
-                log.debug(te)
-                log.warning('Could not parse stat metadata for %s' % (k.name,))
-            except KeyError as ke:
-                log.debug(ke)
-                log.warning('Incomplete stat metadata for %s, will ignore' %
-                    (k.name,))
+        for key in keys:
+            directory = os.path.dirname(key.name)
+            directory = directory[directory.index(':')+1:]
+            table = os.path.basename(directory)
+
+            json_data = json.loads(key.get_contents_as_string())
+            files = json_data[directory]
+
+            #log.info('Fileset contains %d files to download' % (len(files)))
+            k = bucket.get_key('%s/%s/%s' % (self.prefix, table, files[0]))
+
+            meta = k.get_metadata('stat') if k else None
+
+            for file in files:
+                self.fileset.append('%s/%s' % (table, file))
+
+            if meta:
+                try:
+                    json_data = json.loads(meta)
+                    owner = json_data['user']
+                    group = json_data['group']
+                except TypeError as te:
+                    log.debug(te)
+                    log.warning('Could not parse stat metadata for %s' % (k.name,))
+                except KeyError as ke:
+                    log.debug(ke)
+                    log.warning('Incomplete stat metadata for %s, will ignore' %
+                        (k.name,))
         return (owner, group)
 
     def _test_permissions(self):
@@ -177,8 +196,9 @@ class DownloadHandler(object):
         while queue.empty() == False:
             queueddownload = queue.get()
             fname = queueddownload.filename
-            keypath = '%s/%s' % (self.prefix, fname,)
-            destfile = os.path.join(self.target, os.path.basename(fname))
+            table = fname[:fname.index('-')]
+            keypath = '%s/%s' % (self.prefix, fname)
+            destfile = self.dest[table] + fname[fname.index('/'):]
 
             log.debug('Checking if we need to download %s to %s' %
                 (keypath, destfile,))
@@ -201,8 +221,7 @@ class DownloadHandler(object):
                         download = True
 
                     if download and key:
-                        log.info('Downloading %s from %s to %s' %
-                            (key.name, bucket.name, destfile))
+                        log.info('Downloading to %s' % (destfile))
                         key.get_contents_to_filename(destfile)
 
                 except Exception as e:
@@ -228,13 +247,13 @@ class DownloadHandler(object):
 
         #queue up the filesets
         for filename in self.fileset:
-            log.info('Pushing file %s onto queue' % filename)
+            #log.info('Pushing file %s onto queue' % filename)
             self.queue.put(DownloadCounter(filename))
 
-#       launch threads and attach an event to them
+        #launch threads and attach an event to them
         for idx in range(0, self.num_threads):
             self.threads[idx] = {}
-#            e = threading.Event()
+            #e = threading.Event()
             t = threading.Thread(target=self._worker,
                 kwargs={'idx': idx, 'queue': self.queue})
             t.setDaemon(True)
