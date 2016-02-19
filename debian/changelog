@@ -1,3 +1,21 @@
+tablesnap (0.7.3-1) unstable; urgency=medium
+
+  [ riccardo-ferrari ]
+  * fix STS token initializaiton in tableslurp
+
+  [ Marc Tamsky ]
+  * tableslurp: gracefully handle keys lacking metadata
+
+  [ riccardo-ferrari ]
+  * Fix to avoid get_metadata call on non bucket keys
+
+  [ Jeremy Grosser ]
+  * Use iterators the right way.
+  * Add a rudimentary integration test
+  * Release 0.7.3
+
+ -- Jeremy Grosser <jeremy@synack.me>  Fri, 19 Feb 2016 07:35:33 -0800
+
 tablesnap (0.7.2-1) unstable; urgency=medium
 
   * Initial release (Closes: #795869)
