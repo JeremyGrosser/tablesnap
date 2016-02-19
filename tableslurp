@@ -133,17 +133,17 @@ class DownloadHandler(object):
         json_data = json.loads(key.get_contents_as_string())
         self.fileset = json_data[self.origin]
         log.info('Fileset contains %d files to download' % (len(self.fileset)))
-        k = None
-        idx = 0
-        for idx in range(0, len(self.fileset)):
-            k = bucket.get_key('%s/%s' % (self.prefix, self.fileset[idx]))
-            if k != None:
+
+        for fileset in self.fileset:
+            k = bucket.get_key('%s/%s' % (self.prefix, fileset))
+            if k is not None:
                 break
+
 #       The librato branch introduced this
         owner = None
         group = None
 
-        if k == None:
+        if k is None:
             log.warn('Can not fetch metadata information')
             return (owner, group)
 
