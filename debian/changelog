@@ -1,4 +1,4 @@
-tablesnap (0.7.3-1) unstable; urgency=medium
+tablesnap (0.7.3-2) trusty; urgency=medium
 
   [ riccardo-ferrari ]
   * fix STS token initializaiton in tableslurp
