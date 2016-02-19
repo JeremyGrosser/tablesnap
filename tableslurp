@@ -55,6 +55,7 @@ class DownloadCounter(object):
 class DownloadHandler(object):
     key = None
     secret = None
+    token = None
     bucket_name = None
     owner = None
     group = None
@@ -75,6 +76,7 @@ class DownloadHandler(object):
         self.preserve = args.preserve
         self.key = args.aws_key
         self.secret = args.aws_secret
+        self.token = args.token
         self.bucket_name = args.bucket[0]
         self.num_threads = args.threads
         self.force = args.force
@@ -131,12 +133,22 @@ class DownloadHandler(object):
         json_data = json.loads(key.get_contents_as_string())
         self.fileset = json_data[self.origin]
         log.info('Fileset contains %d files to download' % (len(self.fileset)))
-        k = bucket.get_key('%s/%s' % (self.prefix, self.fileset[0]))
+
+        for fileset in self.fileset:
+            k = bucket.get_key('%s/%s' % (self.prefix, fileset))
+            if k is not None:
+                break
+
 #       The librato branch introduced this
-        meta = k.get_metadata('stat')
-        log.debug('Metadata is %s' % (meta,))
         owner = None
         group = None
+
+        if k is None:
+            log.warn('Can not fetch metadata information')
+            return (owner, group)
+
+        meta = k.get_metadata('stat')
+        log.debug('Metadata is %s' % (meta,))
         if meta:
             try:
                 json_data = json.loads(meta)
