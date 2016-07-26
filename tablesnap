@@ -108,9 +108,14 @@ class UploadHandler(pyinotify.ProcessEvent):
 
     def get_bucket(self):
         # Reconnect to S3
-        s3 = boto.connect_s3(aws_access_key_id=self.key,
-                             aws_secret_access_key=self.secret,
-                             security_token=self.token)
+        if self.token:
+            s3 = boto.connect_s3(aws_access_key_id=self.key,
+                                 aws_secret_access_key=self.secret,
+                                 security_token=self.token)
+        else:
+            s3 = boto.connect_s3(aws_access_key_id=self.key,
+                                 aws_secret_access_key=self.secret)
+
         return s3.get_bucket(self.bucket_name)
 
     def worker(self):
@@ -205,7 +210,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         self.log.debug('Setting missing md5sum metadata for %s' %
                                       (keyname,))
                         key.set_metadata('md5sum', md5[0])
-        
+
                 if result:
                     self.log.info("Keyname %s already exists, skipping upload"
                                   % (keyname))
@@ -214,7 +219,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         'MD5 hashes differ, you should take a look. As immutable '
                         'files never change, one must assume the local file got '
                         'corrupted and the right version is the one in S3. Will '
-                        'skip this file to avoid future complications' % 
+                        'skip this file to avoid future complications' %
                         (filename, keyname, ))
 
                 return result
@@ -501,9 +506,13 @@ def main():
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
 
-    s3 = boto.connect_s3(aws_access_key_id=args.aws_key,
-                         aws_secret_access_key=args.aws_secret,
-                         security_token=args.aws_token)
+    if args.aws_token:
+        s3 = boto.connect_s3(aws_access_key_id=args.aws_key,
+                             aws_secret_access_key=args.aws_secret,
+                             security_token=args.aws_token)
+    else:
+        s3 = boto.connect_s3(aws_access_key_id=args.aws_key,
+                             aws_secret_access_key=args.aws_secret)
     bucket = s3.get_bucket(args.bucket)
 
     handler = UploadHandler(threads=args.threads, key=args.aws_key,

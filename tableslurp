@@ -102,9 +102,15 @@ class DownloadHandler(object):
     def _get_bucket(self):
 #       unsure if boto is thread-safe, will reconnect every time
         log.debug('Connecting to s3')
-        conn = boto.connect_s3(aws_access_key_id=self.key,
-                               aws_secret_access_key=self.secret,
-                               security_token=self.token)
+        if self.token:
+            conn = boto.connect_s3(aws_access_key_id=self.key,
+                                   aws_secret_access_key=self.secret,
+                                   security_token=self.token)
+        else:
+            conn = boto.connect_s3(aws_access_key_id=self.key,
+                                   aws_secret_access_key=self.secret,
+                                   security_token=self.token)
+
         bucket = conn.get_bucket(self.bucket_name)
         log.debug('Connected to s3')
         return bucket
