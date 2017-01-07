@@ -52,6 +52,7 @@ def clean_backups(args, log):
 
     json_keys = []
     to_delete = set() # we'll remove from this list
+    found_one_key = False
     for k in sorted(
         key_list,
         key=lambda k: dtparser.parse(k.last_modified),
@@ -60,6 +61,11 @@ def clean_backups(args, log):
         to_delete.add(k.name)
         if k.name.endswith('-listdir.json'):
             json_keys.append(k)
+            if args.keep_existing and not found_one_key:
+                # always keep one key regardless of age if keeping existing files
+                log.info("Keep existing set - keeping the most recent key: %s", k.name)
+                to_delete.remove(k.name)
+                found_one_key = True
 
     log.info("%s keys total", len(to_delete))
     log.debug("%s json listdir keys", len(json_keys))
@@ -82,7 +88,7 @@ def clean_backups(args, log):
         dirname = jdict.keys()[0]
         # fullpaths here since some files are in subdirectories
         fullpaths = [os.path.join(dirname, x) for x in jdict.values()[0]]
-        keep_jkey = False # assume we are deleting the jkey
+        keep_jkey = not is_old # delete old jkeys
         for x in fullpaths:
 	    keep_file = True # assume we are keeping the file - this is the default behavior
 	    # if we are checking if we should keep existing files
@@ -90,7 +96,6 @@ def clean_backups(args, log):
 	        # don't keep the file if it is old and it does not exist
 	        keep_file = False
 
-            keep_jkey = keep_jkey or keep_file  # keep the jkey if we are keeping any of the files
 	    key_to_keep = '%s:%s' % (args.name, x)
 	    # if we are keeping the file
 	    if keep_file and key_to_keep in to_delete:
