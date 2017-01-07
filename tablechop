@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 """ Cleans SSTables on S3 """
+import eventlet
+eventlet.monkey_patch()
 
 import argparse
 import boto
@@ -9,6 +11,8 @@ import logging
 import os
 import socket
 import sys
+from eventlet.greenpool import GreenPool
+from eventlet import pools
 
 from datetime import datetime
 from dateutil import parser as dtparser
@@ -24,6 +28,19 @@ def days_ago(tstamp):
     delta = now - backup
     return delta.days
 
+
+def get_bucket(args):
+    try:
+        s3conn = boto.s3.connect_to_region(args.aws_region,
+                                           aws_access_key_id=args.key,
+                                           aws_secret_access_key=args.secret,
+                                           security_token=args.token)
+        return s3conn.get_bucket(args.bucket)
+    except boto.exception.BotoServerError, e:
+        log.error('Problem initializing S3 connection: %s', e)
+        sys.exit(1)
+
+
 def clean_backups(args, log):
 
     if args.debug:
@@ -32,14 +49,7 @@ def clean_backups(args, log):
     if not args.name:
         args.name = socket.getfqdn()
 
-    try:
-        s3conn = boto.connect_s3(aws_access_key_id=args.key,
-                                 aws_secret_access_key=args.secret,
-                                 security_token=args.token)
-        bucket = s3conn.get_bucket(args.bucket)
-    except boto.exception.BotoServerError, e:
-        log.error('Problem initializing S3 connection: %s', e)
-        sys.exit(1)
+    bucket = get_bucket(args)
 
     try:
         key_list = bucket.list("%s:%s" % (args.name, args.path))
@@ -49,80 +59,70 @@ def clean_backups(args, log):
 
     log.info("Connected to S3, getting keys ...")
 
-    json_keys = []
-    to_delete = set() # we'll remove from this list
-    for k in sorted(
-        key_list,
-        key=lambda k: dtparser.parse(k.last_modified),
-        reverse=True, # most recent first
-    ):
-        to_delete.add(k.name)
-        if k.name.endswith('-listdir.json'):
-            json_keys.append(k)
+    index_keys = []
+    data_keys = []
+    files_to_delete = set()
 
-    log.info("%s keys total", len(to_delete))
-    log.debug("%s json listdir keys", len(json_keys))
+    for key in key_list:
+        files_to_delete.add(key.name)
+        if key.name.endswith('-listdir.json'):
+            index_keys.append(key)
+        else:
+            data_keys.append(key)
 
-    is_old = False	# used in testing for existence of file on server
-    for jkey in json_keys:
-        log.debug("key dated : %s (%s)", jkey.last_modified,
-                  jkey.name.split('/')[-1])
-        if days_ago(jkey.last_modified) > args.age:
-            # We've gone back past our cutoff
-            log.info("Reached cutoff at timestamp %s", jkey.last_modified)
-            is_old = True
-            if not args.keep_existing:
-                break
-        ky = bucket.get_key(jkey)
-        jdict = json.loads(ky.get_contents_as_string())
-        if len(jdict.values()) != 1:
-            raise SystemError('-listdir.json file should have '
-                'a single key/value pair!')
-        dirname = jdict.keys()[0]
-        # fullpaths here since some files are in subdirectories
-        fullpaths = [os.path.join(dirname, x) for x in jdict.values()[0]]
-        keep_jkey = False # assume we are deleting the jkey
-        for x in fullpaths:
-	    keep_file = True # assume we are keeping the file - this is the default behavior
-	    # if we are checking if we should keep existing files
-	    if args.keep_existing and is_old and not os.path.isfile(x):
-	        # don't keep the file if it is old and it does not exist
-	        keep_file = False
+    index_keys.sort(key=lambda k: dtparser.parse(k.last_modified),
+                    reverse=True)
 
-            keep_jkey = keep_jkey or keep_file  # keep the jkey if we are keeping any of the files
-	    key_to_keep = '%s:%s' % (args.name, x)
-	    # if we are keeping the file
-	    if keep_file and key_to_keep in to_delete:
-	        to_delete.remove(key_to_keep)
+    log.info("Found %s index files and %s data files", len(index_keys), len(data_keys))
 
-        if keep_jkey and jkey.name in to_delete:
-            to_delete.remove(jkey.name)
+    index_files_to_keep = set()
+    index_files_to_keep.add(index_keys[0].name)  # Always keep the most recent index.
+    for index_key in index_keys:
+        if days_ago(index_key.last_modified) > args.age:
+            break
+        index_files_to_keep.add(index_key.name)
 
-    to_del_len = len(to_delete)
-    if args.list_deletes:
-        # chunk into lines with 10 files each to avoid either too many lines
-        # or one gigantic line
-        to_del_list = list(to_delete)
-        for delchunk in [','.join(to_del_list[i:i+10]) for \
-                         i in xrange(0, to_del_len, 10)]:
-            log.info("Files to delete: %s" % delchunk)
+    log.info("Keeping %s/%s index files", len(index_files_to_keep), len(index_keys))
+
+    files_to_keep = get_files_from_indexes(args, index_files_to_keep)
+    log.info("Keeping %s/%s data files", len(files_to_keep), len(data_keys))
+
+    files_to_delete -= files_to_keep
+    files_to_delete -= index_files_to_keep
+
     if args.debug:
-        log.debug("%s non-keeper keys to delete", to_del_len)
-        ddates = list(set([x.last_modified[:10] for x in key_list \
-                           if x.name in to_delete]))
-        ddates.sort()
-        log.debug("deletion dates : %s", ddates)
+        log.debug("Would delete %s/%s files", len(files_to_delete), len(index_keys) + len(data_keys))
         log.debug("Test mode, nothing deleted")
         return
 
-    log.info("Deleting %s keys", to_del_len)
-
+    log.info("Deleting %s/%s files", len(files_to_delete), len(index_keys) + len(data_keys))
     try:
-        bucket.delete_keys(to_delete) # !!
+        bucket.delete_keys(files_to_delete)
     except Exception as e:
         log.error('S3 delete ERR, will try again later [%s]', e)
 
-    log.info("Keys deleted")
+
+def get_files_from_indexes(args, index_files):
+    pool = GreenPool(int(args.parallel))
+    bucket_pool = pools.Pool(create=lambda: get_bucket(args), max_size=int(args.parallel))
+
+    def worker(index_file):
+        with bucket_pool.item() as bucket:
+            return get_file_list(args, bucket, index_file)
+
+    res = set()
+    for result in pool.imap(worker, index_files):
+        res.update(result)
+    return res
+
+
+def get_file_list(args, bucket, index_file):
+    index = json.loads(bucket.get_key(index_file).get_contents_as_string())
+    if len(index.values()) != 1:
+        raise SystemError('-listdir.json file should have a single key/value pair!')
+    dirname = index.keys()[0]
+    return ["%s:%s" % (args.name, os.path.join(dirname, filename)) for filename in index.values()[0]]
+
 
 def main(log):
     parser = argparse.ArgumentParser(
@@ -143,11 +143,11 @@ def main(log):
         action='store_true',
         help='Log every file being deleted')
     parser.add_argument(
-        '-e',
-        '--keep-existing',
-        dest='keep_existing',
-        action='store_true',
-        help='Keep files that still exist on this server regardless of age')
+        '-j',
+        '--parallel',
+        dest='parallel',
+        default=5,
+        help='Parallelism to fetch index files from S3')
     parser.add_argument(
         '-k',
         '--key',
@@ -163,6 +163,10 @@ def main(log):
     parser.add_argument('--token',
         default=os.environ.get('AWS_SECURITY_TOKEN'),
         help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
+    parser.add_argument('--aws-region',
+        default='us-east-1',
+        choices=[region.name for region in boto.s3.regions()],
+        help='AWS region to connect to.')
     parser.add_argument(
         '-n',
         '--name',
