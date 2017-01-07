@@ -10,7 +10,7 @@ Vcs-Git: git://github.com/JeremyGrosser/tablesnap
 Vcs-Browser: https://github.com/JeremyGrosser/tablesnap
 
 Package: tablesnap
-Architecture: any
+Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}
 Description: Backup utility for the Cassandra database
  Tablesnap is a script that uses inotify to monitor a directory for IN_MOVED_TO
