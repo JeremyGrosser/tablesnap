@@ -53,7 +53,7 @@ max_file_size = 5120
 default_chunk_size = 256
 
 # Default inotify event to listen on
-default_listen_event = 'IN_MOVED_TO'
+default_listen_events = ['IN_MOVED_TO', 'IN_CLOSE_WRITE']
 
 class UploadHandler(pyinotify.ProcessEvent):
     def my_init(self, threads=None, key=None, secret=None, token=None, region=None,
@@ -395,7 +395,7 @@ class UploadHandler(pyinotify.ProcessEvent):
 
 def get_mask(listen_events):
     if not listen_events:
-        listen_events = [default_listen_event]
+        listen_events = default_listen_events
 
     mask = 0
     while listen_events:
@@ -481,7 +481,7 @@ def main():
     parser.add_argument('--listen-events', action='append',
         choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
         help='Which events to listen on, can be specified multiple times. '
-             'Values: IN_MOVED_TO (default), IN_CLOSE_WRITE')
+             'Values: IN_MOVED_TO, IN_CLOSE_WRITE (default both)')
 
     include_group = parser.add_mutually_exclusive_group()
     include_group.add_argument('-e', '--exclude', default=None,
