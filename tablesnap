@@ -56,7 +56,7 @@ default_chunk_size = 256
 default_listen_event = 'IN_MOVED_TO'
 
 class UploadHandler(pyinotify.ProcessEvent):
-    def my_init(self, threads=None, key=None, secret=None, token=None,
+    def my_init(self, threads=None, key=None, secret=None, token=None, region=None,
                 bucket_name=None,
                 prefix=None, name=None, max_size=None, chunk_size=None,
                 include=None,
@@ -68,6 +68,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.key = key
         self.secret = secret
         self.token = token
+        self.region = region
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.name = name or socket.getfqdn()
@@ -109,12 +110,14 @@ class UploadHandler(pyinotify.ProcessEvent):
     def get_bucket(self):
         # Reconnect to S3
         if self.token:
-            s3 = boto.connect_s3(aws_access_key_id=self.key,
-                                 aws_secret_access_key=self.secret,
-                                 security_token=self.token)
+            s3 = boto.s3.connect_to_region(self.region,
+                                           aws_access_key_id=self.key,
+                                           aws_secret_access_key=self.secret,
+                                           security_token=self.token)
         else:
-            s3 = boto.connect_s3(aws_access_key_id=self.key,
-                                 aws_secret_access_key=self.secret)
+            s3 = boto.s3.connect_to_region(self.region,
+                                           aws_access_key_id=self.key,
+                                           aws_secret_access_key=self.secret)
 
         return s3.get_bucket(self.bucket_name)
 
@@ -444,6 +447,10 @@ def main():
     parser.add_argument('-s', '--aws-secret',
         default=os.environ.get('AWS_SECRET_ACCESS_KEY'),
         help='Amazon S3 Secret (default from AWS_SECRET_ACCESS_KEY in environment)')
+    parser.add_argument('--aws-region',
+        default='us-east-1',
+        choices=[region.name for region in boto.s3.regions()],
+        help='AWS region to connect to.')
     parser.add_argument('--aws-token',
         default=os.environ.get('AWS_SECURITY_TOKEN'),
         help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
@@ -507,16 +514,19 @@ def main():
     # potential thread-safety problems.
 
     if args.aws_token:
-        s3 = boto.connect_s3(aws_access_key_id=args.aws_key,
-                             aws_secret_access_key=args.aws_secret,
-                             security_token=args.aws_token)
+        s3 = boto.s3.connect_to_region(args.aws_region,
+                                       aws_access_key_id=args.aws_key,
+                                       aws_secret_access_key=args.aws_secret,
+                                       security_token=args.aws_token)
     else:
-        s3 = boto.connect_s3(aws_access_key_id=args.aws_key,
-                             aws_secret_access_key=args.aws_secret)
+        s3 = boto.s3.connect_to_region(args.aws_region,
+                                       aws_access_key_id=args.aws_key,
+                                       aws_secret_access_key=args.aws_secret)
     bucket = s3.get_bucket(args.bucket)
 
     handler = UploadHandler(threads=args.threads, key=args.aws_key,
                             secret=args.aws_secret, token=args.aws_token,
+                            region=args.aws_region,
                             bucket_name=bucket,
                             prefix=args.prefix, name=args.name,
                             include=include,
