@@ -1,3 +1,9 @@
+tablesnap (1.0.2-1) unstable; urgency=medium
+
+  * New upstream release 
+
+ -- Jeremy Grosser <jeremy@synack.me>  Tue, 10 Jan 2017 17:53:02 -0800
+
 tablesnap (1.0.1-1) unstable; urgency=medium
 
   * New upstream release
