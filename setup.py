@@ -4,7 +4,7 @@ setup(
     name='tablesnap',
     description='Uses inotify to monitor Cassandra SSTables and upload them to S3',
     long_description='Tablesnap is a script that uses inotify to monitor a directory for IN_MOVED_TO events and reacts to them by spawning a new thread to upload that file to Amazon S3, along with a JSON-formatted list of what other files were in the directory at the time of the copy.',
-    version='1.0.1',
+    version='1.0.2',
     license='BSD',
     author='Jeremy Grosser',
     author_email='jeremy@synack.me',

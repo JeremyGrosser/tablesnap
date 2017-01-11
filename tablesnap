@@ -60,6 +60,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 bucket_name=None,
                 prefix=None, name=None, max_size=None, chunk_size=None,
                 include=None,
+                reduced_redundancy=False,
                 with_index=True,
                 with_sse=False,
                 keyname_separator=None,
@@ -76,6 +77,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.retries = default_retries
         self.log = log
         self.include = include
+        self.reduced_redundancy = reduced_redundancy
         self.with_index = with_index
         self.with_sse = with_sse
         self.md5_on_start = md5_on_start
@@ -307,7 +309,9 @@ class UploadHandler(pyinotify.ProcessEvent):
                         key = bucket.new_key('%s-listdir.json' % keyname)
                         key.set_contents_from_string(json_str,
                             headers={'Content-Type': 'application/json'},
-                            replace=True, encrypt_key=self.with_sse)
+                            replace=True,
+                            reduced_redundancy=self.reduced_redundancy,
+                            encrypt_key=self.with_sse)
                         break
                     except:
                         if r == self.retries - 1:
@@ -345,6 +349,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         self.log.info('Performing multipart upload for %s' %
                                      (filename))
                         mp = bucket.initiate_multipart_upload(keyname,
+                            reduced_redundancy=self.reduced_redundancy,
                             metadata={'stat': meta, 'md5sum': md5[0]},
                             encrypt_key=self.with_sse)
                         part = 1
@@ -377,6 +382,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         key.set_contents_from_filename(filename, replace=True,
                                                        cb=progress, num_cb=1,
                                                        md5=md5,
+                                                       reduced_redundancy=self.reduced_redundancy,
                                                        encrypt_key=self.with_sse)
                     break
                 except:
@@ -461,6 +467,8 @@ def main():
         help='Automatically start watching new subdirectories within path(s)')
     parser.add_argument('-B', '--backup', action='store_true', default=False,
         help='Backup existing files to S3 if they are not already there')
+    parser.add_argument('-R', '--reduced-redundancy', action='store_true',
+        default=False, help='Use reduced redundancy for files uploaded to S3.')
     parser.add_argument('-p', '--prefix', default='',
         help='Set a string prefix for uploaded files in S3')
     parser.add_argument('--without-index', action='store_true', default=False,
@@ -530,6 +538,7 @@ def main():
                             bucket_name=bucket,
                             prefix=args.prefix, name=args.name,
                             include=include,
+                            reduced_redundancy=args.reduced_redundancy,
                             with_index=(not args.without_index),
                             with_sse=args.with_sse,
                             keyname_separator=args.keyname_separator,
