@@ -16,7 +16,7 @@ PROGNAME=`basename $0`
 TABLESNAP_BIN=/usr/bin/tablesnap
 
 if [ "x$TABLESNAP_USER" = "x" ]; then
-    TABLESNAP_USER=$USER
+    TABLESNAP_USER=`whoami`
 fi
 
 if [ "x$TABLESNAP_LOGDIR" = "x" ]; then
@@ -36,6 +36,7 @@ start() {
             exit 0
         else
             echo "Removing stale pid file: $PID_FILE"
+			rm -f $PID_FILE
         fi
     fi
     
@@ -81,7 +82,7 @@ status() {
         fi
     else
         echo "$PROGNAME is not running."
-        return 0;
+        return 1;
     fi
     return 1
 }
