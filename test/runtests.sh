@@ -51,6 +51,9 @@ test_tablesnap() {
 	kill $pid
 
 	docker exec tablesnap-test1 test_verify_and_delete.py
+
+	echo 'Using tablechop to clean up...'
+	docker exec tablesnap-test1 tablechop tablesnap-unittest /var/lib/cassandra/data/keyspace1 -1
 }
 
 case $1 in
