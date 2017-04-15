@@ -224,6 +224,10 @@ class DownloadHandler(object):
                             (key.name, bucket.name, destfile))
                         key.get_contents_to_filename(destfile)
 
+                        log.debug('Changing owner:group for %s to %s:%s' %
+                            (destfile, self.owner, self.group,))
+                        os.chown(destfile, self.owner, self.group)
+
                 except Exception as e:
                     log.debug(e)
                     log.exception('Failed to download `%s` retrying' %
