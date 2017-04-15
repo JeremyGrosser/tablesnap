@@ -14,7 +14,7 @@ def main():
     else:
         print 'TEST PASS Tablesnap created S3 keys successfully!'
 
-    bucket.delete_keys(keys)
+    #bucket.delete_keys(keys)
     return 0
 
 
