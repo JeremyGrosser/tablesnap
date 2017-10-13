@@ -81,7 +81,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.reduced_redundancy = reduced_redundancy
         self.with_index = with_index
         self.with_sse = with_sse
-        self.delete_on_backup=delete_on_backup
+        self.delete_on_backup = delete_on_backup
         self.md5_on_start = md5_on_start
 
         if max_size:
