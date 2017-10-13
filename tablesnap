@@ -40,9 +40,6 @@ default_log.info('Starting up')
 # Default number of writer threads
 default_threads = 4
 
-# Default retries
-default_retries = 1
-
 # S3 limit for single file upload
 s3_limit = 5 * 2**30
 
@@ -66,7 +63,8 @@ class UploadHandler(pyinotify.ProcessEvent):
                 keyname_separator=None,
                 delete_on_backup=False,
                 log=default_log,
-                md5_on_start=False):
+                md5_on_start=False,
+                retries=1):
         self.key = key
         self.secret = secret
         self.token = token
@@ -75,7 +73,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.prefix = prefix
         self.name = name or socket.getfqdn()
         self.keyname_separator = keyname_separator
-        self.retries = default_retries
+        self.retries = retries
         self.log = log
         self.include = include
         self.reduced_redundancy = reduced_redundancy
@@ -522,6 +520,10 @@ def main():
         help='Chunk size for multipart uploads (default: %dM or 10%%%% of '
              'free memory if default is not available)' % default_chunk_size)
 
+    parser.add_argument('--retries', default=0,
+        help='If a file upload fails, retry N times before throwing an'
+             'exception (default: no retrying)')
+
     args = parser.parse_args()
 
     # For backwards-compatibility: If neither exclude nor include are set,
@@ -559,7 +561,8 @@ def main():
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
                             chunk_size=int(args.multipart_chunk_size),
-                            md5_on_start=args.md5_on_start)
+                            md5_on_start=args.md5_on_start,
+                            retries=(args.retries + 1))
 
     wm = pyinotify.WatchManager()
     notifier = pyinotify.Notifier(wm, handler)
