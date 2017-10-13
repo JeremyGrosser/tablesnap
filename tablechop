@@ -90,6 +90,10 @@ def clean_backups(args, log):
     files_to_delete -= files_to_keep
     files_to_delete -= index_files_to_keep
 
+    if args.list_deletes:
+        for filename in sorted(files_to_delete):
+            log.info('Deleting %s', filename)
+
     if args.debug:
         log.debug("Would delete %s/%s files", len(files_to_delete), len(index_keys) + len(data_keys))
         log.debug("Test mode, nothing deleted")
