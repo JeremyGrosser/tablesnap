@@ -520,7 +520,7 @@ def main():
         help='Chunk size for multipart uploads (default: %dM or 10%%%% of '
              'free memory if default is not available)' % default_chunk_size)
 
-    parser.add_argument('--retries', default=0,
+    parser.add_argument('--retries', default=0, type=int,
         help='If a file upload fails, retry N times before throwing an'
              'exception (default: no retrying)')
 
