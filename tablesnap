@@ -504,14 +504,16 @@ def main():
     parser.add_argument('--delete-on-backup', action='store_true', default=False,
                         help='Delete the file upon successful backup.')
     include_group = parser.add_mutually_exclusive_group()
-    include_group.add_argument('-e', '--exclude', default=None,
+    include_group.add_argument('-e', '--exclude', default=None, nargs='+',
         help='Exclude files matching this regular expression from upload.'
              'WARNING: If neither exclude nor include are defined, then all '
-             'files matching "-tmp" are excluded.')
-    include_group.add_argument('-i', '--include', default=None,
+             'files matching "-tmp" are excluded. This option may be used '
+             'more than once.')
+    include_group.add_argument('-i', '--include', default=None, nargs='+',
         help='Include only files matching this regular expression into upload.'
              'WARNING: If neither exclude nor include are defined, then all '
-             'files matching "-tmp" are excluded.')
+             'files matching "-tmp" are excluded. This option may be used '
+             'more than once.')
 
     parser.add_argument('--max-upload-size', default=max_file_size,
         help='Max size for files to be uploaded before doing multipart '
@@ -526,9 +528,9 @@ def main():
     # then include only files not matching '-tmp'. This was the default
     include = lambda path: path.find('-tmp') == -1
     if args.exclude:
-        include = lambda path: not re.search(args.exclude, path)
+        include = lambda path: not any([re.search(x, path) for x in args.exclude])
     if args.include:
-        include = lambda path: not not re.search(args.include, path)
+        include = lambda path: any([re.search(x, path) for x in args.include])
 
     # Check S3 credentials only. We reconnect per-thread to avoid any
     # potential thread-safety problems.
