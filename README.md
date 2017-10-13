@@ -30,17 +30,8 @@ package includes an init script that can run and daemonize tablesnap for you.
 Tablesnap does not daemonize itself. This is best left to tools like
 init, supervisord, daemontools, etc.
 
-There are pre-build binaries for Debian jessie amd64 are available from:
-<https://launchpad.net/~synack/+archive/tablesnap>
-
-	# cat /etc/apt/sources.list.d/tablesnap.list << EOF
-	> deb http://ppa.launchpad.net/synack/tablesnap/ubuntu maverick main
-	> deb-src http://ppa.launchpad.net/synack/tablesnap/ubuntu maverick main
-	> EOF
-	# aptitude update
-
-To build the debian package from source, assuming you have a working pbuilder
-environment:
+We do not currently maintain binary packages of tablesnap. To build the debian
+package from source, assuming you have a working pbuilder environment:
 
 	git checkout debian
 	git-buildpackage --git-upstream-branch=master --git-debian-branch=debian --git-builder='pdebuild'
