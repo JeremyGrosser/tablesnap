@@ -64,6 +64,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 with_index=True,
                 with_sse=False,
                 keyname_separator=None,
+                delete_on_backup=False,
                 log=default_log,
                 md5_on_start=False):
         self.key = key
@@ -80,6 +81,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.reduced_redundancy = reduced_redundancy
         self.with_index = with_index
         self.with_sse = with_sse
+        self.delete_on_backup=delete_on_backup
         self.md5_on_start = md5_on_start
 
         if max_size:
@@ -295,6 +297,11 @@ class UploadHandler(pyinotify.ProcessEvent):
             if sent == total:
                 self.log.info('Finished uploading %s' % filename)
 
+        def delete_if_enabled():
+            if self.delete_on_backup:
+                os.remove(filename)
+                self.log.info('Deleted %s' % filename)
+
         try:
             dirname = os.path.dirname(filename)
             if self.with_index and self.should_create_index(filename):
@@ -374,6 +381,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                                        'completing upload' % (part,))
                         mp.complete_upload()
                         progress(100, 100)
+                        delete_if_enabled()
                     else:
                         self.log.debug('Performing monolithic upload')
                         key = bucket.new_key(keyname)
@@ -384,6 +392,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                                                        md5=md5,
                                                        reduced_redundancy=self.reduced_redundancy,
                                                        encrypt_key=self.with_sse)
+                        delete_if_enabled()
                     break
                 except:
                     if not os.path.exists(filename):
@@ -490,7 +499,8 @@ def main():
         choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
         help='Which events to listen on, can be specified multiple times. '
              'Values: IN_MOVED_TO, IN_CLOSE_WRITE (default both)')
-
+    parser.add_argument('--delete-on-backup', action='store_true', default=False,
+                        help='Delete the file upon successful backup.')
     include_group = parser.add_mutually_exclusive_group()
     include_group.add_argument('-e', '--exclude', default=None,
         help='Exclude files matching this regular expression from upload.'
@@ -541,6 +551,7 @@ def main():
                             reduced_redundancy=args.reduced_redundancy,
                             with_index=(not args.without_index),
                             with_sse=args.with_sse,
+                            delete_on_backup=args.delete_on_backup,
                             keyname_separator=args.keyname_separator,
                             max_size=int(args.max_upload_size),
                             chunk_size=int(args.multipart_chunk_size),
