@@ -145,6 +145,8 @@ class UploadHandler(pyinotify.ProcessEvent):
     def process_IN_MOVED_TO(self, event):
         self.add_file(event.pathname)
 
+    def process_IN_CREATE(self, event):
+        self.add_file(event.pathname)
     #
     # Check if this keyname (ie, file) has already been uploaded to
     # the S3 bucket. This will verify that not only does the keyname
@@ -487,9 +489,9 @@ def main():
         help='If you want to compute *every file* for its MD5 checksum at '
              'start time, enable this option.')
     parser.add_argument('--listen-events', action='append',
-        choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE'],
+        choices=['IN_MOVED_TO', 'IN_CLOSE_WRITE', 'IN_CREATE'],
         help='Which events to listen on, can be specified multiple times. '
-             'Values: IN_MOVED_TO, IN_CLOSE_WRITE (default both)')
+             'Values: IN_MOVED_TO, IN_CLOSE_WRITE, IN_CREATE (default IN_MOVED_TO, IN_CLOSE_WRITE)')
 
     include_group = parser.add_mutually_exclusive_group()
     include_group.add_argument('-e', '--exclude', default=None,

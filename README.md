@@ -119,9 +119,10 @@ optional arguments:
                         into upload.WARNING: If neither exclude nor include
                         are defined, then all files matching "-tmp" are
                         excluded.
-  --listen-events {IN_MOVED_TO,IN_CLOSE_WRITE}
+  --listen-events {IN_MOVED_TO,IN_CLOSE_WRITE,IN_CREATE}
                         Which events to listen on, can be specified multiple
-                        times. Values: IN_MOVED_TO (default), IN_CLOSE_WRITE
+                        times. Values: IN_MOVED_TO, IN_CLOSE_WRITE, IN_CREATE
+                        (default: IN_MOVED_TO, IN_CLOSE_WRITE)
   --max-upload-size MAX_UPLOAD_SIZE
                         Max size for files to be uploaded before doing
                         multipart (default 5120M)
