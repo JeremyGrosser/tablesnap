@@ -29,6 +29,8 @@ import pwd
 import socket
 import sys
 from Queue import Queue
+import re
+from datetime import datetime
 
 log = logging.getLogger('tableslurp')
 stderr = logging.StreamHandler()
@@ -39,6 +41,111 @@ if os.environ.get('TDEBUG', False):
     log.setLevel(logging.DEBUG)
 else:
     log.setLevel(logging.INFO)
+
+clog_regex = re.compile('CommitLog-\d-(\d+).log')
+
+
+def parse_clog(clog):
+    return clog_regex.search(clog).group(1)
+
+
+def get_bucket(region, key, secret, token, bucket_name):
+#   unsure if boto is thread-safe, will reconnect every time
+    log.debug('Connecting to s3')
+    if token:
+        conn = boto.s3.connect_to_region(region,
+                                         aws_access_key_id=key,
+                                         aws_secret_access_key=secret,
+                                         security_token=token)
+    else:
+        conn = boto.s3.connect_to_region(region,
+                                         aws_access_key_id=key,
+                                         aws_secret_access_key=secret,
+                                         security_token=token)
+
+    bucket = conn.get_bucket(bucket_name)
+    log.debug('Connected to s3')
+    return bucket
+
+
+def find_latest_listdirjson_for_every_table(bucket, prefix):
+    latest_listdirjsons={}
+    # Get all ks folders, e.g /var/lib/cassandra/<ks>
+    keyspace_dirs = [_.name for _ in list(bucket.list(prefix='%s/' % prefix, delimiter='/'))]
+
+    for keyspace_dir in keyspace_dirs:
+        # Get all tbl folders for every ks folder, e.g /var/lib/cassandra/<ks>/<tbl>
+        table_dirs = [_.name for _ in list(bucket.list(prefix=keyspace_dir, delimiter='/'))]
+
+        for table_dir in table_dirs:
+            # Get all listdir.json files for every tbl folder,
+            # e.g /var/lib/cassandra/<ks>/<tbl>/mc-1/2/3/4...-Data.db-listdir.json
+            keys = [_ for _ in bucket.list(prefix=table_dir, delimiter='/') if _.name.endswith('-listdir.json')]
+
+            if keys:
+                keys.sort(key=lambda l: parser.parse(l.last_modified))
+                key = keys.pop()
+                table = table_dir.replace('%s/' % prefix, '').rstrip('/')
+                latest_listdirjsons[table] = key
+    return latest_listdirjsons
+
+
+def build_recursive_fileset(bucket, prefix):
+    table_to_latest_listdirjson_mapping = find_latest_listdirjson_for_every_table(bucket, prefix)
+    table_to_files_mapping = {}
+
+    for table, listdirjson in table_to_latest_listdirjson_mapping.items():
+        json_data = json.loads(listdirjson.get_contents_as_string())
+        # There should only ever be one latest listdir.json and hence, one set of (latest) SSTables
+        sstables = json_data.itervalues().next()
+        table_to_files_mapping[table] = sstables
+        log.info("Found %s with %d files", table, len(sstables))
+
+    return table_to_files_mapping
+
+
+def build_clog_fileset(bucket, prefix, clog_prefix):
+    fileset=[]
+    table_to_latest_listdirjson_mapping = find_latest_listdirjson_for_every_table(bucket, prefix)
+    listdirjsons = table_to_latest_listdirjson_mapping.values()
+    listdirjsons.sort(key=lambda l: parser.parse(l.last_modified), reverse=True)
+    oldest_key = listdirjsons.pop()
+    oldest_timestamp = datetime.strptime(oldest_key.last_modified, "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%s')
+    oldest_timestamp_ms = int(oldest_timestamp) * 1000
+    clogs = [_.name for _ in bucket.list(prefix='%s/' % clog_prefix)]
+    clogs.sort(reverse=True)
+    for clog in clogs:
+        if parse_clog(clog) > oldest_timestamp_ms:
+            fileset.append(clog.replace('%s/' % clog_prefix, '').rstrip('/'))
+        else:
+            break
+    return fileset
+
+
+def build_single_fileset(bucket, prefix, origin, target_file):
+    key = None
+    # If you want to restore a fileset in particular
+    if target_file:
+        key = bucket.get_key('%s/%s-listdir.json' %
+                             (prefix, target_file))
+
+    else:
+        prefix_part_count = prefix.count('/') + 1
+        keys = [_ for _ in bucket.list(prefix='%s/' %
+                                              (prefix,)) if
+                _.name.endswith('-listdir.json') and _.name.count('/') == prefix_part_count]
+        if keys:
+            keys.sort(key=lambda l: parser.parse(l.last_modified))
+            key = keys.pop()
+
+    if not key:
+        raise LookupError('Cannot find anything to restore from %s:%s/%s' %
+                          (bucket.name, prefix, target_file or ''))
+
+    json_data = json.loads(key.get_contents_as_string())
+    fileset = json_data[origin]
+    log.info('Fileset contains %d files to download' % (len(fileset)))
+    return fileset
 
 
 class DownloadCounter(object):
@@ -70,8 +177,8 @@ class DownloadHandler(object):
     num_threads = 4
     threads = {}
 
-    def __init__(self, args):
-        self.target = args.target[0]
+    def __init__(self, args=None, target=None, prefix=None, fileset=None):
+        self.target = target
         self.origin = args.origin[0]
         self.preserve = args.preserve
         self.key = args.aws_key
@@ -83,10 +190,11 @@ class DownloadHandler(object):
         self.force = args.force
         if args.name:
             self.name = args.name
-        self.prefix = '%s:%s' % (self.name, self.origin)
+        self.prefix = prefix
+        self.fileset=fileset
 
 #       It may be a bit sub-optimal, but I rather fail sooner than later
-        (owner, group) = self._build_file_set(args.file)
+        (owner, group) = self._check_metadata()
 
         if not self.preserve:
             owner = args.owner
@@ -101,48 +209,10 @@ class DownloadHandler(object):
                 (owner, group,))
 
     def _get_bucket(self):
-#       unsure if boto is thread-safe, will reconnect every time
-        log.debug('Connecting to s3')
-        if self.token:
-            conn = boto.s3.connect_to_region(self.region,
-                                             aws_access_key_id=self.key,
-                                             aws_secret_access_key=self.secret,
-                                             security_token=self.token)
-        else:
-            conn = boto.s3.connect_to_region(self.region,
-                                             aws_access_key_id=self.key,
-                                             aws_secret_access_key=self.secret,
-                                             security_token=self.token)
+        return get_bucket(self.region, self.key, self.secret, self.token, self.bucket_name)
 
-        bucket = conn.get_bucket(self.bucket_name)
-        log.debug('Connected to s3')
-        return bucket
-
-    def _build_file_set(self, target_file=None):
-        log.info('Building fileset')
-        key = None
-#       If you want to restore a file-set in particular
+    def _check_metadata(self):
         bucket = self._get_bucket()
-        if target_file:
-            key = bucket.get_key('%s/%s-listdir.json' %
-                (self.prefix, target_file))
-#       Otherwise try to fetch the most recent one
-        else:
-            prefix_part_count = self.prefix.count('/') + 1
-            keys = [_ for _ in bucket.list(prefix='%s/' %
-                (self.prefix,)) if _.name.endswith('-listdir.json') and _.name.count('/') == prefix_part_count]
-            if keys:
-                keys.sort(key=lambda l: parser.parse(l.last_modified))
-                key = keys.pop()
-
-        if not key:
-            raise LookupError('Cannot find anything to restore from %s:%s/%s' %
-                (bucket.name, self.prefix, target_file or ''))
-
-        json_data = json.loads(key.get_contents_as_string())
-        self.fileset = json_data[self.origin]
-        log.info('Fileset contains %d files to download' % (len(self.fileset)))
-
         for fileset in self.fileset:
             k = bucket.get_key('%s/%s' % (self.prefix, fileset))
             if k is not None:
@@ -207,7 +277,7 @@ class DownloadHandler(object):
                 #Retry downloading until we succeed
                 try:
                     key = bucket.get_key(keypath)
-                    log.debug('Key objectd is %s' % key)
+                    log.debug('Key object is %s' % key)
                     if os.path.isfile(destfile):
                         stat = os.stat(destfile)
                         if self.force:
@@ -302,9 +372,16 @@ def main():
         help='After download, chgrp files to this group.')
     ap.add_argument('-t', '--threads', type=int, default=4,
         help='Split the download between this many threads')
-    ap.add_argument('-f', '--file',
+    include_group = ap.add_mutually_exclusive_group()
+    include_group.add_argument('-f', '--file',
         help='If specified, will download the file-set this file belongs to '
         'instead of the latest one available.')
+    include_group.add_argument('-r', '--recursive', default=False, action='store_true',
+        help='Recursively download the files at the given origin (path), using latest ones available.')
+    include_group.add_argument('--commitlogs',
+        help='Download commitlogs, assuming up to the most recent batch possible. \n'
+             'If your bucket structure is <fqdn or name>/var/lib/cassandra/commitlog \n'
+             'provide /var/lib/cassandra/commitlog. \n')
     ap.add_argument('--force', default=False, action='store_true',
         help='Force download files even if they exist')
     ap.add_argument('-n', '--name', default=socket.getfqdn(),
@@ -313,12 +390,34 @@ def main():
         help='S3 bucket to download files from')
     ap.add_argument('origin', nargs=1,
         help='Path inside the bucket to the directory you want to download '
-        'files from')
+             'files from. '
+             'E.g if your bucket structure is <fqdn or name>/var/lib/cassandra/data/<ks>/<tbl>/<files>. \n'
+             'With --recursive or --commitlogs, you should provide /var/lib/cassandra/data. \n'
+             'Otherwise, provide /var/lib/cassandra/data/<ks>/<tbl> if you want to restore just one table.')
     ap.add_argument('target', nargs=1,
         help='Path in the local FS where files should be downloaded to')
     args = ap.parse_args()
-    dh = DownloadHandler(args)
-    dh.run()
+
+    prefix='%s:%s' % (args.name, args.origin[0])
+    bucket=get_bucket(args.aws_region, args.aws_key, args.aws_secret, args.token, args.bucket[0])
+    log.info('Building fileset')
+    if args.recursive:
+        table_to_files_mapping=build_recursive_fileset(bucket, prefix)
+        for table,fileset in table_to_files_mapping.iteritems():
+            dh = DownloadHandler(args, target=os.path.join(args.target[0], table),
+                                 prefix=os.path.join(prefix, table), fileset=fileset)
+            dh.run()
+    elif args.commitlogs:
+        clog_prefix = '%s:%s' % (args.name, args.commitlogs)
+        fileset = build_clog_fileset(bucket, prefix, clog_prefix)
+        dh = DownloadHandler(args, target=os.path.join(args.target[0]), prefix=clog_prefix,
+                             fileset=fileset)
+        dh.run()
+    else:
+        fileset=build_single_fileset(bucket, prefix, args.origin[0], args.file)
+        dh = DownloadHandler(args, target=args.target[0], prefix=prefix,
+                             fileset=fileset)
+        dh.run()
 
 if __name__ == '__main__':
     sys.exit(main())
