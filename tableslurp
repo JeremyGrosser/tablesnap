@@ -213,6 +213,7 @@ class DownloadHandler(object):
 
     def _check_metadata(self):
         bucket = self._get_bucket()
+        k = None
         for fileset in self.fileset:
             k = bucket.get_key('%s/%s' % (self.prefix, fileset))
             if k is not None:
