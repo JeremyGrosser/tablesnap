@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import boto
 import sys
 
@@ -6,13 +6,13 @@ import sys
 def main():
     s3 = boto.connect_s3()
     bucket = s3.get_bucket('tablesnap-unittest')
-    keys = bucket.get_all_keys()
+    keys = list(bucket.get_all_keys())
 
     if not keys:
-        print 'TEST FAIL No keys found in test bucket!'
+        print('TEST FAIL No keys found in test bucket!')
         return 1
     else:
-        print 'TEST PASS Tablesnap created S3 keys successfully!'
+        print('TEST PASS Tablesnap created S3 keys successfully!')
 
     #bucket.delete_keys(keys)
     return 0
