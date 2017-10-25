@@ -16,7 +16,8 @@ setup(
     ],
     install_requires=[
         'pyinotify',
-        'boto>=2.6.0',
+        'boto3>=1.4.7',
+        'boto>=2.48.0',
         'argparse',
         'python-dateutil',
     ],
