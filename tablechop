@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ Cleans SSTables on S3 """
 import eventlet
@@ -36,7 +36,7 @@ def get_bucket(args):
                                            aws_secret_access_key=args.secret,
                                            security_token=args.token)
         return s3conn.get_bucket(args.bucket)
-    except boto.exception.BotoServerError, e:
+    except boto.exception.BotoServerError as e:
         log.error('Problem initializing S3 connection: %s', e)
         sys.exit(1)
 
@@ -53,7 +53,7 @@ def clean_backups(args, log):
 
     try:
         key_list = bucket.list("%s:%s" % (args.name, args.path))
-    except boto.exception.BotoServerError, e:
+    except boto.exception.BotoServerError as e:
         log.error('Problem getting keys from S3 bucket: %s', e)
         sys.exit(1)
 
@@ -122,10 +122,10 @@ def get_files_from_indexes(args, index_files):
 
 def get_file_list(args, bucket, index_file):
     index = json.loads(bucket.get_key(index_file).get_contents_as_string())
-    if len(index.values()) != 1:
+    if len(list(index.values())) != 1:
         raise SystemError('-listdir.json file should have a single key/value pair!')
-    dirname = index.keys()[0]
-    return ["%s:%s" % (args.name, os.path.join(dirname, filename)) for filename in index.values()[0]]
+    dirname = list(index.keys())[0]
+    return ["%s:%s" % (args.name, os.path.join(dirname, filename)) for filename in list(index.values())[0]]
 
 
 def main(log):

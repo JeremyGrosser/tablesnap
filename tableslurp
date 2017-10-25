@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # -*- mode:python; sh-basic-offset:4; indent-tabs-mode:nil; coding:utf-8 -*-
 # vim:set tabstop=4 softtabstop=4 expandtab shiftwidth=4 fileencoding=utf-8:
@@ -28,7 +28,7 @@ import os
 import pwd
 import socket
 import sys
-from Queue import Queue
+from queue import Queue
 import re
 from datetime import datetime
 
@@ -94,10 +94,10 @@ def build_recursive_fileset(bucket, prefix):
     table_to_latest_listdirjson_mapping = find_latest_listdirjson_for_every_table(bucket, prefix)
     table_to_files_mapping = {}
 
-    for table, listdirjson in table_to_latest_listdirjson_mapping.items():
+    for table, listdirjson in list(table_to_latest_listdirjson_mapping.items()):
         json_data = json.loads(listdirjson.get_contents_as_string())
         # There should only ever be one latest listdir.json and hence, one set of (latest) SSTables
-        sstables = json_data.itervalues().next()
+        sstables = next(iter(json_data.values()))
         table_to_files_mapping[table] = sstables
         log.info("Found %s with %d files", table, len(sstables))
 
@@ -107,7 +107,7 @@ def build_recursive_fileset(bucket, prefix):
 def build_clog_fileset(bucket, prefix, clog_prefix):
     fileset=[]
     table_to_latest_listdirjson_mapping = find_latest_listdirjson_for_every_table(bucket, prefix)
-    listdirjsons = table_to_latest_listdirjson_mapping.values()
+    listdirjsons = list(table_to_latest_listdirjson_mapping.values())
     listdirjsons.sort(key=lambda l: parser.parse(l.last_modified), reverse=True)
     oldest_key = listdirjsons.pop()
     oldest_timestamp = datetime.strptime(oldest_key.last_modified, "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%s')
@@ -404,7 +404,7 @@ def main():
     log.info('Building fileset')
     if args.recursive:
         table_to_files_mapping=build_recursive_fileset(bucket, prefix)
-        for table,fileset in table_to_files_mapping.iteritems():
+        for table,fileset in table_to_files_mapping.items():
             dh = DownloadHandler(args, target=os.path.join(args.target[0], table),
                                  prefix=os.path.join(prefix, table), fileset=fileset)
             dh.run()
