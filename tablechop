@@ -121,7 +121,7 @@ def get_files_from_indexes(args, index_files):
 
 
 def get_file_list(args, bucket, index_file):
-    index = json.loads(bucket.get_key(index_file).get_contents_as_string())
+    index = json.loads(bucket.get_key(index_file).get_contents_as_string(encoding='utf-8'))
     if len(list(index.values())) != 1:
         raise SystemError('-listdir.json file should have a single key/value pair!')
     dirname = list(index.keys())[0]
