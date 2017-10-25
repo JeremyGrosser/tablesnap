@@ -8,13 +8,16 @@ create_image() {
 
 start_cluster() {
 	# Launch a 3 node cassandra cluster
-	docker run --name tablesnap-test1 -d tablesnap-test
-	docker run --name tablesnap-test2 -d --link tablesnap-test1:cassandra tablesnap-test
-	docker run --name tablesnap-test3 -d --link tablesnap-test1:cassandra tablesnap-test
+	docker create --name tablesnap-test1 tablesnap-test
+	docker create --name tablesnap-test2 --link tablesnap-test1:cassandra tablesnap-test
+	docker create --name tablesnap-test3 --link tablesnap-test1:cassandra tablesnap-test
 
 	echo 'Wait for cluster to come up...'
-	docker exec tablesnap-test1 /bin/bash -c 'until nodetool status; do sleep 5; done'
-	sleep 5
+    for node in tablesnap-test1 tablesnap-test2 tablesnap-test3; do
+        docker start $node
+        docker exec $node /bin/bash -c 'until nodetool status; do sleep 5; done'
+        sleep 1
+    done
 }
 
 stop_cluster() {
