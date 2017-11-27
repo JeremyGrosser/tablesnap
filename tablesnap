@@ -65,7 +65,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                 log=default_log,
                 md5_on_start=False,
                 retries=1,
-                listen_events=default_listen_events):
+                listen_events=None):
         self.key = key
         self.secret = secret
         self.token = token
@@ -82,7 +82,7 @@ class UploadHandler(pyinotify.ProcessEvent):
         self.with_sse = with_sse
         self.delete_on_backup = delete_on_backup
         self.md5_on_start = md5_on_start
-        self.listen_events = listen_events
+        self.listen_events = listen_events or default_listen_events
 
         if max_size:
             self.max_size = max_size * 2**20
