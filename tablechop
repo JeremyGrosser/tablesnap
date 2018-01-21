@@ -51,8 +51,16 @@ def clean_backups(args, log):
 
     bucket = get_bucket(args)
 
+    if args.prefix:
+        key_prefix = '%s%s%s%s' % (args.prefix, args.keyname_separator, args.name, args.path)
+    else:
+        if args.keyname_separator == '/' and args.path.startswith('/'):
+            key_prefix = '%s%s' % (args.name, args.path)
+        else:
+            key_prefix = '%s%s%s' % (args.name, args.keyname_separator, args.path)
+
     try:
-        key_list = bucket.list("%s:%s" % (args.name, args.path))
+        key_list = bucket.list(key_prefix)
     except boto.exception.BotoServerError, e:
         log.error('Problem getting keys from S3 bucket: %s', e)
         sys.exit(1)
@@ -125,7 +133,7 @@ def get_file_list(args, bucket, index_file):
     if len(index.values()) != 1:
         raise SystemError('-listdir.json file should have a single key/value pair!')
     dirname = index.keys()[0]
-    return ["%s:%s" % (args.name, os.path.join(dirname, filename)) for filename in index.values()[0]]
+    return ["%s%s%s" % (args.name, args.keyname_separator, os.path.join(dirname, filename)) for filename in index.values()[0]]
 
 
 def main(log):
@@ -171,6 +179,12 @@ def main(log):
         default='us-east-1',
         choices=[region.name for region in boto.s3.regions()],
         help='AWS region to connect to.')
+    parser.add_argument('--prefix',
+        default='',
+        help='Set a string prefix for uploaded files in S3')
+    parser.add_argument('--keyname-separator',
+        default=':',
+        help='Separator for the keyname between name and path.')
     parser.add_argument(
         '-n',
         '--name',
