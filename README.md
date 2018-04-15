@@ -44,6 +44,8 @@ syslog-ng you could add
 
 ```
 # tablesnap
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FJeremyGrosser%2Ftablesnap.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2FJeremyGrosser%2Ftablesnap?ref=badge_shield)
+
 filter f_tablesnap { filter(f_daemon) and match("tablesnap" value("PROGRAM")); };
 destination d_tablesnap { file("/var/log/tablesnap.log"); };
 log { source(s_src); filter(f_tablesnap); destination(d_tablesnap); flags(final); };
@@ -135,3 +137,7 @@ Questions, Comments, and Help
 The fine folks in `#cassandra-ops` on `irc.freenode.net` are an excellent
 resource for getting tablesnap up and running, and also for solving more
 general Cassandra issues.
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FJeremyGrosser%2Ftablesnap.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FJeremyGrosser%2Ftablesnap?ref=badge_large)
