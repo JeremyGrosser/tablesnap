@@ -364,6 +364,10 @@ def main():
         default='us-east-1',
         choices=[region.name for region in boto.s3.regions()],
         help='AWS region to connect to.')
+    ap.add_argument('--prefix', default='',
+        help='Set a string prefix for uploaded files in S3')
+    ap.add_argument('--keyname-separator', default=':',
+        help='Separator for the keyname between name and path.')
     ap.add_argument('-p', '--preserve', default=False, action='store_true',
         help='Preserve the permissions (if they exist) from the source. '
         'This overrides -o and -g')
@@ -398,8 +402,13 @@ def main():
     ap.add_argument('target', nargs=1,
         help='Path in the local FS where files should be downloaded to')
     args = ap.parse_args()
-
-    prefix='%s:%s' % (args.name, args.origin[0])
+    if args.prefix:
+        prefix = '%s%s%s%s' % (args.prefix, args.keyname_separator, args.name, args.origin[0])
+    else:
+        if args.keyname_separator == '/' and args.origin[0].startswith('/'):
+            prefix='%s%s' % (args.name, args.origin[0])
+        else:
+            prefix='%s%s%s' % (args.name, args.keyname_separator, args.origin[0])
     bucket=get_bucket(args.aws_region, args.aws_key, args.aws_secret, args.token, args.bucket[0])
     log.info('Building fileset')
     if args.recursive:
@@ -409,7 +418,14 @@ def main():
                                  prefix=os.path.join(prefix, table), fileset=fileset)
             dh.run()
     elif args.commitlogs:
-        clog_prefix = '%s:%s' % (args.name, args.commitlogs)
+        if args.prefix:
+            clog_prefix = '%s%s%s%s' % (args.prefix, args.keyname_separator, args.name, args.commitlogs)
+        else:
+            if args.keyname_separator == '/' and args.commitlogs.startswith('/'):
+                clog_prefix = '%s%s' % (args.name, args.commitlogs)
+            else:
+                clog_prefix = '%s%s%s' % (args.name, args.keyname_separator, args.commitlogs)
+
         fileset = build_clog_fileset(bucket, prefix, clog_prefix)
         dh = DownloadHandler(args, target=os.path.join(args.target[0]), prefix=clog_prefix,
                              fileset=fileset)
